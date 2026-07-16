@@ -70,6 +70,16 @@ class ItemCondition(StrEnum):
     unknown = "unknown"
 
 
+class RefundBasis(StrEnum):
+    """The justification a refund relies on."""
+
+    returned_item = "returned_item"
+    damaged_item = "damaged_item"
+    incorrect_item = "incorrect_item"
+    approved_missing_delivery = "approved_missing_delivery"
+    unsupported = "unsupported"
+
+
 class ReasonCode(StrEnum):
     # --- Ownership ---
     CUSTOMER_NOT_IDENTIFIED = "CUSTOMER_NOT_IDENTIFIED"
