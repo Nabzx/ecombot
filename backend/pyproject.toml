@@ -14,6 +14,7 @@ dependencies = [
     "alembic>=1.14,<1.15",
     "bcrypt>=4.2,<5",
     "faker>=33,<38",
+    "pgvector>=0.3,<0.4",
 ]
 
 [dependency-groups]
@@ -75,7 +76,7 @@ show_error_codes = true
 exclude = ["alembic/versions/"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*"]
+module = ["alembic.*", "pgvector.*"]
 ignore_missing_imports = true
 
 # --- Pytest -------------------------------------------------------------------

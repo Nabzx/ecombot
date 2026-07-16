@@ -96,6 +96,16 @@ class PolicyStatus(StrEnum):
     expired = "expired"
 
 
+class PolicySourceType(StrEnum):
+    """Trust classification of an indexable policy document (S3 retrieval)."""
+
+    official_policy = "official_policy"
+    historical_policy = "historical_policy"
+    test_conflict = "test_conflict"
+    hostile_fixture = "hostile_fixture"
+    untrusted_external = "untrusted_external"
+
+
 def pg_enum(enum_cls: type[StrEnum], name: str) -> SAEnum:
     """Build a PostgreSQL native enum column type that stores member values."""
     return SAEnum(

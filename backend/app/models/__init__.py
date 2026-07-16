@@ -11,6 +11,7 @@ from app.models.enums import (
     CustomerTier,
     MessageSender,
     OrderStatus,
+    PolicySourceType,
     PolicyStatus,
     ProductCategory,
     ShipmentStatus,
@@ -20,7 +21,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.order import Order, OrderItem
-from app.models.policy import Policy, PolicyVersion
+from app.models.policy import Policy, PolicyChunk, PolicyVersion
 from app.models.product import Product
 from app.models.shipment import Shipment
 from app.models.ticket import Ticket, TicketMessage
@@ -34,6 +35,8 @@ __all__ = [
     "OrderItem",
     "OrderStatus",
     "Policy",
+    "PolicyChunk",
+    "PolicySourceType",
     "PolicyStatus",
     "PolicyVersion",
     "Product",

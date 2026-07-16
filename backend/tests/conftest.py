@@ -97,6 +97,8 @@ async def _create_schema() -> None:
     engine = create_async_engine(TEST_DATABASE_URL)
     try:
         async with engine.begin() as conn:
+            # pgvector must exist before create_all builds the embedding column/index.
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             await conn.run_sync(Base.metadata.drop_all)
             await conn.run_sync(Base.metadata.create_all)
     finally:
