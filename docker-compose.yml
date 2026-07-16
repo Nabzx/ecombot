@@ -43,6 +43,8 @@ services:
       # Synthetic policy/data files live at the repo root; make them available for
       # seeding (read-only).
       - ./data:/app/data:ro
+      # Evaluation datasets (read) and reports (written by the eval runner).
+      - ./evaluations:/app/evaluations
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"

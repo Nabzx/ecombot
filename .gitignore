@@ -35,3 +35,6 @@ pgdata/
 .idea/
 .vscode/
 *.swp
+
+# Generated retrieval evaluation reports
+evaluations/reports/retrieval/*.json

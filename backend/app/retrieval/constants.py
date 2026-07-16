@@ -34,5 +34,5 @@ EMBED_BATCH_SIZE = 64
 # Support thresholds. Lexical (ts_rank_cd) presence above this = topical support;
 # semantic (cosine similarity) support needs a higher bar because the deterministic hash
 # embedding is a weak semantic signal.
-DEFAULT_MIN_SUPPORT_SCORE = 0.02
+DEFAULT_MIN_SUPPORT_SCORE = 0.10
 SEMANTIC_SUPPORT_MIN = 0.30

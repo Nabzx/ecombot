@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 
 from sqlalchemy import func, select
 
@@ -171,6 +172,47 @@ async def _run_search(query: str, topic: str | None, mode: str) -> int:
     return 0
 
 
+async def _run_eval() -> int:
+    from dataclasses import asdict
+    from datetime import UTC, datetime
+
+    from app.core.paths import get_data_dir
+    from app.retrieval.evaluation import evaluate, hard_gate_failures
+
+    settings = get_settings()
+    provider = get_embedding_provider(settings)
+    async with get_sessionmaker()() as session:
+        metrics = await evaluate(session, provider)
+
+    for mode, m in metrics.items():
+        print(
+            f"[{mode:8}] R@1={m.recall_at_1:.2f} R@3={m.recall_at_3:.2f} "
+            f"R@5={m.recall_at_5:.2f} MRR={m.mrr:.2f} topic={m.topic_accuracy:.2f} "
+            f"unsup_rej={m.unsupported_rejection:.2f} "
+            f"active={m.active_version_accuracy:.2f} "
+            f"conflict={m.conflict_detection:.2f} "
+            f"hostile_excl={m.hostile_exclusion:.2f} p95={m.p95_latency_ms}ms"
+        )
+
+    summary = {
+        mode: {k: v for k, v in asdict(m).items() if k != "outcomes"}
+        for mode, m in metrics.items()
+    }
+    reports_dir = get_data_dir().parent / "evaluations" / "reports" / "retrieval"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    (reports_dir / f"retrieval_eval_{stamp}.json").write_text(
+        json.dumps({"generated_at": stamp, "modes": summary}, indent=2) + "\n"
+    )
+
+    fails = hard_gate_failures(metrics["hybrid"])
+    if fails:
+        print(f"HARD GATE FAILURES (hybrid): {fails}")
+        return 1
+    print("Hard gates passed (active-version, conflict, hostile-exclusion = 1.00).")
+    return 0
+
+
 async def _run_show_citation(citation_id: str) -> int:
     async with get_sessionmaker()() as session:
         candidate = await RetrievalRepository(session).get_by_citation_id(citation_id)
@@ -205,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     show = sub.add_parser("show-citation", help="Show a chunk by citation id")
     show.add_argument("citation_id")
+    sub.add_parser("eval", help="Run the retrieval evaluation (enforces hard gates)")
     args = parser.parse_args(argv)
 
     async def _run() -> int:
@@ -224,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
                 return await _run_search(args.query, args.topic, args.mode)
             if args.command == "show-citation":
                 return await _run_show_citation(args.citation_id)
+            if args.command == "eval":
+                return await _run_eval()
             return 2
         finally:
             await dispose_engine()
