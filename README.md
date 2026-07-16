@@ -9,11 +9,12 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S0 — Foundations.** This repository currently contains only the
-> runnable skeleton: a FastAPI backend with health endpoints, a Next.js status page, a
-> PostgreSQL + pgvector database, migrations, quality tooling and CI. **No domain
-> models, AI workflows, tools, retrieval, approvals, evaluations or business rules are
-> implemented yet.** They arrive in later stages (see the roadmap below).
+> **Current stage: S1 — Domain Model & Synthetic Data.** The runnable foundation (S0)
+> plus a strongly-constrained PostgreSQL domain model for Meridian & Co. and a
+> deterministic synthetic dataset (customers, products, orders, shipments, tickets,
+> policies) with seed/verify tooling. **No AI workflows, tools, retrieval, business
+> rules, approvals, outbox execution or evaluations are implemented yet** — they arrive
+> in later stages (see the roadmap below).
 
 ## Why this project exists
 
@@ -46,6 +47,32 @@ PostgreSQL + pgvector
 | Local run  | Docker Compose                                                     |
 | CI         | GitHub Actions (backend, frontend, integration)                    |
 
+## Domain & synthetic data (S1)
+
+The platform models the support operations of **Meridian & Co.**, a fictional UK
+homeware retailer. Core entities: **Customer → Order → OrderItem** (with **Product**),
+**Order → Shipment**, **Customer/Order → Ticket → TicketMessage**, and **Policy →
+PolicyVersion**. Money is stored as integer pennies; primary keys are UUIDs; enums are
+native PostgreSQL types; important invariants are enforced by database constraints. See
+[docs/domain-model.md](docs/domain-model.md) for the full model and ER diagram.
+
+The deterministic seed (fixed seed, UK Faker, no external calls) produces roughly:
+
+| Users | Products | Customers | Orders | Tickets (adversarial) | Policies/versions |
+| ----- | -------- | --------- | ------ | --------------------- | ----------------- |
+| 4     | 42       | 55        | 161    | 85 (13)               | 10 / 12           |
+
+All ten ticket categories, every shipment status, and return-window boundary cases are
+represented. Named demo fixtures (e.g. `DEMO-REFUND-APPROVAL-001`, `DEMO-RETURN-DAY-30`,
+`DEMO-PROMPT-INJECTION-001`, `DEMO-CROSS-CUSTOMER-001`) are tagged on tickets and listed
+in [data/synthetic/demo_cases.json](data/synthetic/demo_cases.json). See
+[docs/synthetic-data.md](docs/synthetic-data.md).
+
+**Data privacy:** every record is synthetic. There are no real customers, no real
+payment details, and no real company systems; names/emails/phone numbers are fabricated
+(`@example.com`, `07…`). Adversarial ticket content is stored verbatim for later
+security evaluation and is never executed.
+
 ## Prerequisites
 
 - Docker + Docker Compose (the only requirement to run the stack)
@@ -65,8 +92,17 @@ Then open:
 - Backend API: <http://localhost:8000>
 - API docs (Swagger): <http://localhost:8000/docs>
 
-The backend applies database migrations automatically on startup. Stop with
-`docker compose down` (the database volume is preserved).
+The backend applies database migrations automatically on startup. Populate the
+synthetic dataset with:
+
+```bash
+make seed          # or: docker compose exec backend python -m app.seeds.cli seed
+make seed-stats    # show dataset statistics
+make verify-data   # run integrity checks (non-zero exit on failure)
+```
+
+Stop with `docker compose down` (the database volume is preserved). The database is
+published on host port **5433** (to avoid clashing with any local Postgres on 5432).
 
 ## Non-Docker development
 
@@ -88,7 +124,8 @@ npm run dev
 ```
 
 You can point the local backend at the Dockerised database by running only
-`docker compose up db` and setting `DATABASE_URL=...@localhost:5432/agentops`.
+`docker compose up db` and setting `DATABASE_URL=...@localhost:5433/agentops`
+(the dev database is published on host port 5433).
 
 ## Environment configuration
 
@@ -111,6 +148,10 @@ Via `make` (see `make help`) or the underlying commands directly:
 | Frontend shell      | `make frontend-shell` | `docker compose exec frontend sh`                          |
 | Apply migrations    | `make migrate`     | `docker compose exec backend alembic upgrade head`             |
 | New migration       | `make migration m="msg"` | `... alembic revision -m "msg"`                          |
+| Seed data           | `make seed`        | `docker compose exec backend python -m app.seeds.cli seed`     |
+| Reset + reseed      | `make reseed`      | `... python -m app.seeds.cli reseed --yes` (DEV ONLY)          |
+| Seed statistics     | `make seed-stats`  | `... python -m app.seeds.cli stats`                            |
+| Verify data         | `make verify-data` | `... python -m app.seeds.cli verify`                           |
 | Backend tests       | `make test-backend`  | `cd backend && uv run pytest`                                |
 | Frontend tests      | `make test-frontend` | `cd frontend && npm run test`                                |
 | Lint                | `make lint`        | `ruff format --check . && ruff check .` / `npm run lint`       |
@@ -135,25 +176,37 @@ cd backend  && uv run ruff check . && uv run mypy . && uv run pytest
 cd frontend && npm run lint && npm run typecheck && npm run test && npm run build
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same checks on every push and pull request,
-plus an integration job that applies migrations against a real PostgreSQL service and
-verifies readiness and the pgvector extension. Nothing in CI requires paid APIs.
+Backend DB-backed tests use a **disposable PostgreSQL test database** (never SQLite).
+Start the stack first (`docker compose up -d db`) so they can reach Postgres on host
+port 5433; override with `TEST_DATABASE_URL` if needed. Tests are isolated per-test via
+transaction rollback.
 
-## Current limitations (S0)
+CI (`.github/workflows/ci.yml`) runs, on every push and PR: backend lint + type-check,
+the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector,
+applies migrations, seeds the synthetic data, runs the integrity check, and runs the
+full pytest suite. Nothing in CI requires paid APIs.
 
-- Only health endpoints exist; there is no domain data, no AI and no dashboard.
-- The stage packages under `backend/app/` (models, tools, rules, workflows, …) are
-  intentionally empty placeholders with per-package READMEs.
+## Current limitations (S1)
+
+- The domain model and synthetic data exist, but there is **no AI, no tools, no
+  retrieval, no business rules, no approvals and no dashboard** yet — the frontend is
+  still the S0 status page.
+- The later-stage packages under `backend/app/` (tools, rules, workflows, providers,
+  approvals, outbox, tracing, audit, evaluations) are intentionally empty placeholders.
+- Workflow / approval / outbox / audit / evaluation **tables are deferred** to the
+  stages that first use them (see [docs/domain-model.md](docs/domain-model.md)).
 - `JWT_SECRET` in `.env.example` is a labelled development placeholder; authentication
   is not wired up yet.
+- The synthetic dataset is anchored to a fixed reference date (2026-07-16), so
+  "days since delivery" are relative to that date rather than today.
 - Two moderate `npm audit` advisories remain in a `postcss` copy bundled **inside**
   Next.js; they cannot be resolved without downgrading Next and do not affect this
   build.
 
 ## Roadmap
 
-**S0 Foundations (this stage)** → S1 Domain & Synthetic Data → S2 Deterministic core &
+S0 Foundations → **S1 Domain & Synthetic Data (this stage)** → S2 Deterministic core &
 rules → S3 RAG → S4 Provider abstraction → S5 Workflow state machine → S6 Human-in-the-
 loop & outbox → S7 Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
 
-**Next up: S1 — Domain & Synthetic Data.**
+**Next up: S2 — Deterministic Tools & Business Rules.**

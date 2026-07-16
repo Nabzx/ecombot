@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend (ruff, mypy, pytest)
+  backend-quality:
+    name: Backend quality (ruff, mypy)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,9 +36,6 @@ jobs:
 
       - name: MyPy
         run: uv run mypy .
-
-      - name: Pytest
-        run: uv run pytest
 
   frontend:
     name: Frontend (eslint, tsc, build)
@@ -73,14 +70,15 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
 
-  integration:
-    name: Integration (migrations + db readiness)
+  backend-tests:
+    name: Backend tests (migrations, seed, verify, pytest)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
     env:
       DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops
+      TEST_DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops_test
       JWT_SECRET: ci-only-secret
     services:
       db:
@@ -110,22 +108,29 @@ jobs:
       - name: Apply migrations
         run: uv run alembic upgrade head
 
-      - name: Verify database readiness and pgvector extension
+      - name: Verify pgvector extension
         run: |
           uv run python - <<'PY'
           import asyncio
           from sqlalchemy import text
-          from app.db.session import check_database_connection, get_engine
+          from app.db.session import get_engine
 
           async def main() -> None:
-              assert await check_database_connection(), "readiness check failed"
-              engine = get_engine()
-              async with engine.connect() as conn:
+              async with get_engine().connect() as conn:
                   result = await conn.execute(
                       text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
                   )
                   assert result.scalar() == 1, "pgvector extension not enabled"
-              print("database ready and pgvector enabled")
+              print("pgvector enabled")
 
           asyncio.run(main())
           PY
+
+      - name: Seed synthetic data
+        run: uv run python -m app.seeds.cli seed
+
+      - name: Verify data integrity
+        run: uv run python -m app.seeds.cli verify
+
+      - name: Run tests (model, repository, seed)
+        run: uv run pytest
