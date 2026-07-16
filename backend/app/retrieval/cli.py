@@ -1,9 +1,9 @@
 """CLI for policy indexing and (from later groups) search and evaluation.
 
-    python -m app.retrieval.cli index
-    python -m app.retrieval.cli reindex --yes
-    python -m app.retrieval.cli stats
-    python -m app.retrieval.cli verify
+python -m app.retrieval.cli index
+python -m app.retrieval.cli reindex --yes
+python -m app.retrieval.cli stats
+python -m app.retrieval.cli verify
 """
 
 from __future__ import annotations
