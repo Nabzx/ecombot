@@ -10,6 +10,7 @@ FRONTEND_DIR := frontend
 .DEFAULT_GOAL := help
 .PHONY: help up down build logs backend-shell frontend-shell migrate migration \
         seed reseed seed-stats verify-data \
+        list-rules list-tools demo-tool demo-rules \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -55,6 +56,24 @@ seed-stats: ## Show seeded dataset statistics
 
 verify-data: ## Verify data integrity (non-zero exit on failure)
 	$(COMPOSE) exec backend python -m app.seeds.cli verify
+
+# --- Deterministic rules & tools (S2) ----------------------------------------
+list-rules: ## List deterministic business rules
+	$(COMPOSE) exec backend python -m app.rules.cli list-rules
+
+list-tools: ## List registered tools
+	$(COMPOSE) exec backend python -m app.tools.cli list-tools
+
+demo-tool: ## Print a tool's input schema: make demo-tool TOOL=get_order
+	$(COMPOSE) exec backend python -m app.tools.cli schema $(TOOL)
+
+demo-rules: ## Run the deterministic layer over the named demo fixtures
+	@for fx in DEMO-TRACKING-001 DEMO-REFUND-APPROVAL-001 DEMO-RETURN-DAY-30 \
+	           DEMO-RETURN-DAY-31 DEMO-PROMPT-INJECTION-001 DEMO-CROSS-CUSTOMER-001; do \
+		echo "=== $$fx ==="; \
+		$(COMPOSE) exec -T backend python -m app.tools.cli run-demo $$fx; \
+		echo; \
+	done
 
 # --- Quality (run locally) ---------------------------------------------------
 test-backend: ## Run backend tests
