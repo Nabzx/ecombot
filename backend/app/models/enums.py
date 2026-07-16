@@ -22,6 +22,14 @@ class CustomerTier(StrEnum):
     vip = "vip"
 
 
+class ProductCategory(StrEnum):
+    kitchenware = "kitchenware"
+    home_decor = "home_decor"
+    bedding_and_towels = "bedding_and_towels"
+    small_furniture = "small_furniture"
+    consumer_accessories = "consumer_accessories"
+
+
 class OrderStatus(StrEnum):
     placed = "placed"
     paid = "paid"

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
+import app.models  # noqa: F401  (register all models on Base.metadata)
 from alembic import context
 from app.core.config import get_settings
 from app.db.base import Base
