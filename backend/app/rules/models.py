@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import PolicyStatus
 from app.rules.enums import (
+    ApprovalRole,
     DecisionOutcome,
     ReasonCode,
     RiskLevel,
@@ -52,6 +53,9 @@ class RuleResult(BaseModel):
     execution_permitted: bool = False
     rule_version: str
     idempotency_key: str | None = None
+    # Populated by the routing rule.
+    required_role: ApprovalRole | None = None
+    may_propose: bool | None = None
 
     def has(self, code: ReasonCode) -> bool:
         return code in self.reason_codes

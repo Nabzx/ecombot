@@ -26,6 +26,7 @@ from app.rules.models import RuleResult
 
 RULE_VERSION = "refund-v1"
 
+
 class RefundHistoryPort(Protocol):
     async def refunded_total_pence(self, order_id: uuid.UUID) -> int: ...
 
