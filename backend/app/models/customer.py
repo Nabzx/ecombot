@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.pii import mask_email, mask_phone
 from app.db.base import Base
 from app.db.mixins import TimestampMixin, UUIDPKMixin
 from app.models.enums import CustomerTier, pg_enum
@@ -48,6 +49,14 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def masked_email(self) -> str:
+        return mask_email(self.email)
+
+    @property
+    def masked_phone(self) -> str:
+        return mask_phone(self.phone)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"<Customer {self.external_reference} {self.email}>"
