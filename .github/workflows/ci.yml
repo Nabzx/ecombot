@@ -132,5 +132,14 @@ jobs:
       - name: Verify data integrity
         run: uv run python -m app.seeds.cli verify
 
-      - name: Run tests (model, repository, seed)
+      - name: Index policies (deterministic embedding)
+        run: uv run python -m app.retrieval.cli index
+
+      - name: Verify policy index
+        run: uv run python -m app.retrieval.cli verify
+
+      - name: Retrieval evaluation (enforces hard gates)
+        run: uv run python -m app.retrieval.cli eval
+
+      - name: Run tests (models, rules, tools, retrieval)
         run: uv run pytest

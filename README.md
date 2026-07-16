@@ -9,13 +9,45 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S2 — Deterministic Tools & Business Rules.** On top of the S0
-> foundation and S1 domain/data, this stage adds the **deterministic authority layer**:
-> ownership, return/refund/cancellation/delivery/remedy eligibility, refund limits,
-> policy validity, risk classification, routing and idempotency — plus a strictly-typed,
-> least-privilege **tool registry** exposing them. **The rules, not an LLM, decide
-> eligibility.** No LLM, RAG, workflow engine, approvals, outbox or evaluations are
-> implemented yet — they arrive in later stages (see the roadmap below).
+> **Current stage: S3 — Policy Retrieval & Evidence Grounding.** On top of S0–S2, this
+> stage adds **version-aware hybrid policy retrieval with citations**: policy documents are
+> chunked, indexed (PostgreSQL full-text + pgvector), and retrieved via Reciprocal Rank
+> Fusion, returning exact citations plus support/conflict status. **Retrieval finds and
+> cites evidence; it does not generate a customer answer** (that is S4+), and the
+> deterministic layer still decides which policy is active and whether policies conflict.
+> No LLM, answer generation, workflow engine, approvals or outbox are implemented yet.
+
+## Policy retrieval (S3)
+
+Runs fully offline (no LLM, no network). Policy documents become searchable evidence; a
+later AI may use the citations but never decides which policy version is active, whether
+conflicting policies combine, or whether an unsupported answer is invented.
+
+- **Ingestion** (`app/retrieval/ingestion.py`): deterministic, idempotent chunking +
+  embedding into `policy_chunks` (tsvector + `vector(256)`); unchanged sources are
+  skipped, never silently rebuilt. See [docs/policy-indexing.md](docs/policy-indexing.md).
+- **Hybrid retrieval** (`app/retrieval/service.py`): lexical (`ts_rank_cd`) + semantic
+  (pgvector cosine) fused by RRF, with active-version/date/source filtering, conflict
+  detection (via the S2 policy-validity rule), support checks and stable citations like
+  `POL-RETURNS:v2:returns-policy:chunk-00`. See
+  [docs/policy-retrieval.md](docs/policy-retrieval.md).
+- **Embeddings**: default `deterministic_hash` (dim 256, reproducible, CI-friendly);
+  optional local Sentence Transformers / Ollama (never required).
+- **Trust boundary**: normal retrieval searches only active official policy; hostile and
+  test fixtures are isolated and can never become authoritative evidence.
+- **`search_policies` tool**: model-facing, `policy_read`, read-only, with restricted
+  output (no source override, no raw vectors, no full documents).
+- **Evaluation** (65 cases, 3 hard gates): see
+  [docs/retrieval-evaluation.md](docs/retrieval-evaluation.md). With the deterministic
+  embedding, lexical is the strongest channel (R@1 0.90); hard gates (active-version,
+  conflict detection, hostile-source exclusion) all pass at 1.00.
+
+```bash
+make index-policies
+make verify-policy-index
+make search-policies QUERY="Can I return an opened item after 30 days?"
+make eval-retrieval
+```
 
 ## Deterministic rules & tools (S2)
 
@@ -187,6 +219,10 @@ Via `make` (see `make help`) or the underlying commands directly:
 | List tools          | `make list-tools`  | `... python -m app.tools.cli list-tools`                       |
 | Tool schema         | `make demo-tool TOOL=get_order` | `... python -m app.tools.cli schema get_order`    |
 | Run demo fixtures   | `make demo-rules`  | `... python -m app.tools.cli run-demo DEMO-RETURN-DAY-30`      |
+| Index policies      | `make index-policies` | `... python -m app.retrieval.cli index`                    |
+| Verify policy index | `make verify-policy-index` | `... python -m app.retrieval.cli verify`              |
+| Search policies     | `make search-policies QUERY="..."` | `... python -m app.retrieval.cli search "..."`|
+| Retrieval eval      | `make eval-retrieval` | `... python -m app.retrieval.cli eval` (hard gates)        |
 | Backend tests       | `make test-backend`  | `cd backend && uv run pytest`                                |
 | Frontend tests      | `make test-frontend` | `cd frontend && npm run test`                                |
 | Lint                | `make lint`        | `ruff format --check . && ruff check .` / `npm run lint`       |
@@ -221,7 +257,7 @@ the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector
 applies migrations, seeds the synthetic data, runs the integrity check, and runs the
 full pytest suite. Nothing in CI requires paid APIs.
 
-## Current limitations (S2)
+## Current limitations (S3)
 
 - The domain model and synthetic data exist, but there is **no AI, no tools, no
   retrieval, no business rules, no approvals and no dashboard** yet — the frontend is
@@ -240,9 +276,9 @@ full pytest suite. Nothing in CI requires paid APIs.
 
 ## Roadmap
 
-S0 Foundations → S1 Domain & Synthetic Data → **S2 Deterministic Tools & Business Rules
-(this stage)** → S3 RAG → S4 Provider abstraction → S5 Workflow state machine → S6
-Human-in-the-loop & outbox → S7 Observability & audit → S8 Evaluation → S9 Dashboard →
-S10 Hardening.
+S0 Foundations → S1 Domain & Synthetic Data → S2 Deterministic Tools & Business Rules →
+**S3 Policy Retrieval & Evidence Grounding (this stage)** → S4 Provider Abstraction &
+Prompt System → S5 Workflow state machine → S6 Human-in-the-loop & outbox → S7
+Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
 
-**Next up: S3 — Policy Retrieval & Evidence Grounding.**
+**Next up: S4 — Provider Abstraction & Prompt System.**
