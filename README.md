@@ -157,4 +157,3 @@ rules → S3 RAG → S4 Provider abstraction → S5 Workflow state machine → S
 loop & outbox → S7 Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
 
 **Next up: S1 — Domain & Synthetic Data.**
-# ecombot

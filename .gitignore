@@ -1,0 +1,37 @@
+# --- Secrets & environment ---
+.env
+.env.*
+!.env.example
+
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# --- Node / frontend ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts.bak
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Local databases / data artifacts ---
+*.sqlite3
+*.db
+pgdata/
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
