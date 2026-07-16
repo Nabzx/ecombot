@@ -11,6 +11,8 @@ FRONTEND_DIR := frontend
 .PHONY: help up down build logs backend-shell frontend-shell migrate migration \
         seed reseed seed-stats verify-data \
         list-rules list-tools demo-tool demo-rules \
+        index-policies reindex-policies policy-index-stats verify-policy-index \
+        search-policies eval-retrieval \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -66,6 +68,24 @@ list-tools: ## List registered tools
 
 demo-tool: ## Print a tool's input schema: make demo-tool TOOL=get_order
 	$(COMPOSE) exec backend python -m app.tools.cli schema $(TOOL)
+
+index-policies: ## Index policy documents (idempotent)
+	$(COMPOSE) exec backend python -m app.retrieval.cli index
+
+reindex-policies: ## Force a full policy reindex
+	$(COMPOSE) exec backend python -m app.retrieval.cli reindex --yes
+
+policy-index-stats: ## Show policy index statistics
+	$(COMPOSE) exec backend python -m app.retrieval.cli stats
+
+verify-policy-index: ## Verify the policy index (non-zero on failure)
+	$(COMPOSE) exec backend python -m app.retrieval.cli verify
+
+search-policies: ## Search policies: make search-policies QUERY="..."
+	$(COMPOSE) exec backend python -m app.retrieval.cli search "$(QUERY)"
+
+eval-retrieval: ## Run the retrieval evaluation (enforces hard gates)
+	$(COMPOSE) exec backend python -m app.retrieval.cli eval
 
 demo-rules: ## Run the deterministic layer over the named demo fixtures
 	@for fx in DEMO-TRACKING-001 DEMO-REFUND-APPROVAL-001 DEMO-RETURN-DAY-30 \
