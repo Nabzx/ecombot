@@ -63,6 +63,9 @@ class Settings(BaseSettings):
             "postgresql+asyncpg://agentops:agentops@localhost:5432/agentops"
         )
     )
+    # SQL statement echo is off by default even in debug; it is very noisy for CLI
+    # tooling. Enable explicitly when diagnosing queries.
+    db_echo: bool = False
 
     # --- Auth (used from a later stage; placeholders only for now) -----------
     jwt_secret: str = DEV_ONLY_JWT_SECRET

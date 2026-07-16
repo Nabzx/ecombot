@@ -9,6 +9,7 @@ FRONTEND_DIR := frontend
 
 .DEFAULT_GOAL := help
 .PHONY: help up down build logs backend-shell frontend-shell migrate migration \
+        seed reseed seed-stats verify-data \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -41,6 +42,19 @@ migrate: ## Apply migrations inside the backend container
 
 migration: ## Create a revision: make migration m="message"
 	$(COMPOSE) exec backend alembic revision -m "$(m)"
+
+# --- Synthetic data ----------------------------------------------------------
+seed: ## Seed an empty database with synthetic data
+	$(COMPOSE) exec backend python -m app.seeds.cli seed
+
+reseed: ## DEV ONLY: reset and reseed the database
+	$(COMPOSE) exec backend python -m app.seeds.cli reseed --yes
+
+seed-stats: ## Show seeded dataset statistics
+	$(COMPOSE) exec backend python -m app.seeds.cli stats
+
+verify-data: ## Verify data integrity (non-zero exit on failure)
+	$(COMPOSE) exec backend python -m app.seeds.cli verify
 
 # --- Quality (run locally) ---------------------------------------------------
 test-backend: ## Run backend tests

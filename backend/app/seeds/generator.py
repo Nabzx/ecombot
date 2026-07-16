@@ -15,6 +15,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
+from faker import Faker
+
 from app.models.customer import Customer
 from app.models.enums import (
     CustomerTier,
@@ -40,7 +42,6 @@ from app.seeds.tickets_content import (
     CATEGORY_TEMPLATES,
     DEMO_MESSAGES,
 )
-from faker import Faker
 
 SEED = 20260716
 REFERENCE_DATE = date(2026, 7, 16)
