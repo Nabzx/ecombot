@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     hosted_provider_api_key: str | None = None
 
+    # --- Policy retrieval / embeddings (S3) -----------------------------------
+    # deterministic_hash requires no model/network (default; used in CI). The optional
+    # local providers must be explicitly selected and available.
+    embedding_provider: Literal[
+        "deterministic_hash", "sentence_transformers", "ollama"
+    ] = "deterministic_hash"
+    sentence_transformer_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    ollama_embedding_model: str = "nomic-embed-text"
+
     # --- Telemetry (future stage) --------------------------------------------
     otel_enabled: bool = False
     otel_exporter_endpoint: str | None = None
