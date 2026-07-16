@@ -39,6 +39,9 @@ services:
       # Bind mount source for hot reload. The dependency virtualenv lives at /opt/venv
       # (outside /app), so it is not shadowed by this mount.
       - ./backend:/app
+      # Synthetic policy/data files live at the repo root; make them available for
+      # seeding (read-only).
+      - ./data:/app/data:ro
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
