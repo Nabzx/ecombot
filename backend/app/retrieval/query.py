@@ -43,8 +43,32 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 # A tiny stop set; meaning-bearing words (not/after/before/within/without/delivered) are
 # deliberately NOT removed because they change policy meaning.
 _STOP = frozenset(
-    {"the", "a", "an", "is", "are", "to", "of", "for", "and", "or", "my", "i",
-     "you", "do", "can", "it", "in", "on", "at", "be", "was", "me", "we", "this"}
+    {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "to",
+        "of",
+        "for",
+        "and",
+        "or",
+        "my",
+        "i",
+        "you",
+        "do",
+        "can",
+        "it",
+        "in",
+        "on",
+        "at",
+        "be",
+        "was",
+        "me",
+        "we",
+        "this",
+    }
 )
 
 

@@ -65,13 +65,21 @@ RESERVED_TOOL_NAMES = (
 @lru_cache
 def get_registry() -> dict[str, ToolDefinition]:
     """Build the registry by collecting each tool module's ``TOOLS`` tuple."""
-    from app.tools import customers, orders, policies, rules, shipments
+    from app.tools import (
+        customers,
+        orders,
+        policies,
+        retrieval,
+        rules,
+        shipments,
+    )
 
     definitions: list[ToolDefinition] = [
         *customers.TOOLS,
         *orders.TOOLS,
         *shipments.TOOLS,
         *policies.TOOLS,
+        *retrieval.TOOLS,
         *rules.TOOLS,
     ]
     registry = {definition.name: definition for definition in definitions}

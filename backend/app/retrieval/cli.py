@@ -20,6 +20,10 @@ from app.models.policy import Policy, PolicyChunk, PolicyVersion
 from app.retrieval.constants import CHUNKER_VERSION, INDEX_SCHEMA_VERSION
 from app.retrieval.embeddings import get_embedding_provider
 from app.retrieval.ingestion import ingest
+from app.retrieval.models import PolicyRetrievalRequest, RetrievalMode
+from app.retrieval.repository import RetrievalRepository
+from app.retrieval.service import PolicyRetrievalService
+from app.rules.clock import seed_reference_clock
 
 
 async def _run_index(force: bool) -> int:
@@ -130,6 +134,61 @@ async def _run_verify() -> int:
     return 0
 
 
+async def _run_search(query: str, topic: str | None, mode: str) -> int:
+    settings = get_settings()
+    provider = get_embedding_provider(settings)
+    async with get_sessionmaker()() as session:
+        service = PolicyRetrievalService(session, provider)
+        result = await service.retrieve(
+            PolicyRetrievalRequest(query=query, topic=topic, mode=RetrievalMode(mode)),
+            clock=seed_reference_clock(),
+        )
+    print(f"Query:    {result.query}")
+    print(
+        f"Mode:     requested={result.mode_requested.value} "
+        f"used={result.mode_used.value}"
+    )
+    print(
+        f"Support:  {result.support_status.value}   "
+        f"Conflict: {result.conflict_status.value}"
+    )
+    if result.warnings:
+        print(f"Warnings: {result.warnings}")
+    print("Evidence:")
+    for item in result.evidence:
+        print(
+            f"  #{item.hybrid_rank} {item.citation_id}  "
+            f"[{item.topic} v{item.version} {item.status.value}]"
+        )
+        sem = round(item.semantic_score, 4) if item.semantic_score is not None else None
+        print(
+            f"     lexical(rank={item.lexical_rank},score={item.lexical_score}) "
+            f"semantic(rank={item.semantic_rank},score={sem}) "
+            f"hybrid={round(item.hybrid_score, 5)}"
+        )
+        print(f"     section: {item.section_path}")
+        print(f"     excerpt: {item.excerpt[:160].strip()!r}")
+    return 0
+
+
+async def _run_show_citation(citation_id: str) -> int:
+    async with get_sessionmaker()() as session:
+        candidate = await RetrievalRepository(session).get_by_citation_id(citation_id)
+    if candidate is None:
+        print(f"No chunk with citation id {citation_id}")
+        return 1
+    chunk, policy, version = candidate.chunk, candidate.policy, candidate.version
+    print(f"Citation: {chunk.citation_id}")
+    print(
+        f"Policy:   {policy.title} ({policy.topic}) "
+        f"v{version.version} {version.status.value}"
+    )
+    print(f"Effective:{version.effective_from} -> {version.effective_to}")
+    print(f"Section:  {chunk.section_path}")
+    print(f"Body:\n{chunk.body}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="retrieval", description="Policy retrieval")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -138,6 +197,14 @@ def main(argv: list[str] | None = None) -> int:
     reindex.add_argument("--yes", action="store_true", help="Confirm reindex")
     sub.add_parser("stats", help="Show index statistics")
     sub.add_parser("verify", help="Verify the policy index (non-zero on failure)")
+    search = sub.add_parser("search", help="Search policies")
+    search.add_argument("query")
+    search.add_argument("--topic", default=None)
+    search.add_argument(
+        "--mode", default="hybrid", choices=["lexical", "semantic", "hybrid"]
+    )
+    show = sub.add_parser("show-citation", help="Show a chunk by citation id")
+    show.add_argument("citation_id")
     args = parser.parse_args(argv)
 
     async def _run() -> int:
@@ -153,6 +220,10 @@ def main(argv: list[str] | None = None) -> int:
                 return await _run_stats()
             if args.command == "verify":
                 return await _run_verify()
+            if args.command == "search":
+                return await _run_search(args.query, args.topic, args.mode)
+            if args.command == "show-citation":
+                return await _run_show_citation(args.citation_id)
             return 2
         finally:
             await dispose_engine()
