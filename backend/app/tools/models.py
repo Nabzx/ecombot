@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SerializeAsAny
 
 from app.rules.enums import RiskLevel
 from app.tools.errors import ToolError
@@ -22,6 +22,8 @@ class ToolMetadata(BaseModel):
 class ToolResult(BaseModel, Generic[DataT]):
     ok: bool
     tool: str
-    data: DataT | None = None
+    # SerializeAsAny so the concrete data model's fields are emitted, not just the
+    # declared BaseModel's (which would serialise as ``{}``).
+    data: SerializeAsAny[DataT] | None = None
     error: ToolError | None = None
     metadata: ToolMetadata

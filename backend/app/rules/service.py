@@ -137,12 +137,14 @@ def _category_result(
         case TicketCategory.refund_request:
             if first_item is None:
                 return None
+            # Demo requests the item's value, capped at the remaining order balance.
+            requested = min(first_item.line_total_pence, order.total_paid_pence)
             return check_refund_eligibility(
                 RefundInput(
                     ownership_confirmed=ownership_ok,
                     ticket_id=ticket.id,
                     order_id=order.id,
-                    requested_amount_pence=first_item.line_total_pence,
+                    requested_amount_pence=requested,
                     item_line_total_pence=first_item.line_total_pence,
                     order_total_paid_pence=order.total_paid_pence,
                     basis=RefundBasis.damaged_item,
