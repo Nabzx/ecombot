@@ -12,6 +12,8 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.35,<2.1",
     "asyncpg>=0.30,<0.31",
     "alembic>=1.14,<1.15",
+    "bcrypt>=4.2,<5",
+    "faker>=33,<38",
 ]
 
 [dependency-groups]
