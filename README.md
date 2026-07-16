@@ -9,12 +9,43 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S1 — Domain Model & Synthetic Data.** The runnable foundation (S0)
-> plus a strongly-constrained PostgreSQL domain model for Meridian & Co. and a
-> deterministic synthetic dataset (customers, products, orders, shipments, tickets,
-> policies) with seed/verify tooling. **No AI workflows, tools, retrieval, business
-> rules, approvals, outbox execution or evaluations are implemented yet** — they arrive
-> in later stages (see the roadmap below).
+> **Current stage: S2 — Deterministic Tools & Business Rules.** On top of the S0
+> foundation and S1 domain/data, this stage adds the **deterministic authority layer**:
+> ownership, return/refund/cancellation/delivery/remedy eligibility, refund limits,
+> policy validity, risk classification, routing and idempotency — plus a strictly-typed,
+> least-privilege **tool registry** exposing them. **The rules, not an LLM, decide
+> eligibility.** No LLM, RAG, workflow engine, approvals, outbox or evaluations are
+> implemented yet — they arrive in later stages (see the roadmap below).
+
+## Deterministic rules & tools (S2)
+
+The rules engine runs with no model, network or external API. A later AI stage may
+understand language and *propose* an action, but the deterministic layer is the final
+authority for ownership, eligibility, limits, risk and escalation, and nothing is
+executed in S2 (`execution_permitted` is always `false`).
+
+- **Rules** (`backend/app/rules/`): clock abstraction, typed `RuleResult` with stable
+  reason codes, ownership, returns, refunds, cancellations, deliveries, remedies, policy
+  validity, routing and idempotency. See [docs/business-rules.md](docs/business-rules.md).
+- **Tools** (`backend/app/tools/`): a typed registry + executor with permissions, PII-safe
+  results and JSON schemas — read-only lookups (`get_order`, `search_customer`, …) and
+  deterministic rule tools (`check_refund_eligibility`, `calculate_risk_and_route`, …).
+  Write/execute tools are **reserved names without handlers**. See
+  [docs/tool-system.md](docs/tool-system.md).
+
+Key thresholds: 30-day inclusive return window; refunds `<=£50` Medium, `£50.01–£250`
+High, `>£250` Blocked; delivery delay tiers 1–3 / 4–9 / `>=10` days; confidence `>=0.75`
+continue, `0.50–0.74` agent, `<0.50` escalate. All refunds and cancellations require
+Supervisor approval.
+
+Inspect it against the seeded fixtures:
+
+```bash
+make list-rules
+make list-tools
+make demo-tool TOOL=get_order          # print a tool's JSON schema
+make demo-rules                        # run the deterministic layer over demo fixtures
+```
 
 ## Why this project exists
 
@@ -152,6 +183,10 @@ Via `make` (see `make help`) or the underlying commands directly:
 | Reset + reseed      | `make reseed`      | `... python -m app.seeds.cli reseed --yes` (DEV ONLY)          |
 | Seed statistics     | `make seed-stats`  | `... python -m app.seeds.cli stats`                            |
 | Verify data         | `make verify-data` | `... python -m app.seeds.cli verify`                           |
+| List rules          | `make list-rules`  | `... python -m app.rules.cli list-rules`                       |
+| List tools          | `make list-tools`  | `... python -m app.tools.cli list-tools`                       |
+| Tool schema         | `make demo-tool TOOL=get_order` | `... python -m app.tools.cli schema get_order`    |
+| Run demo fixtures   | `make demo-rules`  | `... python -m app.tools.cli run-demo DEMO-RETURN-DAY-30`      |
 | Backend tests       | `make test-backend`  | `cd backend && uv run pytest`                                |
 | Frontend tests      | `make test-frontend` | `cd frontend && npm run test`                                |
 | Lint                | `make lint`        | `ruff format --check . && ruff check .` / `npm run lint`       |
@@ -186,7 +221,7 @@ the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector
 applies migrations, seeds the synthetic data, runs the integrity check, and runs the
 full pytest suite. Nothing in CI requires paid APIs.
 
-## Current limitations (S1)
+## Current limitations (S2)
 
 - The domain model and synthetic data exist, but there is **no AI, no tools, no
   retrieval, no business rules, no approvals and no dashboard** yet — the frontend is
@@ -205,8 +240,9 @@ full pytest suite. Nothing in CI requires paid APIs.
 
 ## Roadmap
 
-S0 Foundations → **S1 Domain & Synthetic Data (this stage)** → S2 Deterministic core &
-rules → S3 RAG → S4 Provider abstraction → S5 Workflow state machine → S6 Human-in-the-
-loop & outbox → S7 Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
+S0 Foundations → S1 Domain & Synthetic Data → **S2 Deterministic Tools & Business Rules
+(this stage)** → S3 RAG → S4 Provider abstraction → S5 Workflow state machine → S6
+Human-in-the-loop & outbox → S7 Observability & audit → S8 Evaluation → S9 Dashboard →
+S10 Hardening.
 
-**Next up: S2 — Deterministic Tools & Business Rules.**
+**Next up: S3 — Policy Retrieval & Evidence Grounding.**
