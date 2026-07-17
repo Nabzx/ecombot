@@ -42,6 +42,15 @@ class WorkflowState(StrEnum):
     CANCELLED = "cancelled"
     RESOLVED_WITHOUT_ACTION = "resolved_without_action"
 
+    # --- S6 approval/execution states (support-ticket-v2 only) ---
+    APPROVED_PENDING_EXECUTION = "approved_pending_execution"  # active
+    EXECUTING_ACTION = "executing_action"  # active
+    APPROVAL_EXPIRED = "approval_expired"  # paused
+    ACTION_FAILED = "action_failed"  # paused
+    MANUAL_ACTION_REQUIRED = "manual_action_required"  # paused
+    APPROVAL_REJECTED = "approval_rejected"  # terminal (completed)
+    ACTION_SUCCEEDED = "action_succeeded"  # terminal (completed)
+
 
 ACTIVE_STATES: frozenset[WorkflowState] = frozenset(
     {
@@ -58,6 +67,8 @@ ACTIVE_STATES: frozenset[WorkflowState] = frozenset(
         WorkflowState.SUMMARISING_EVIDENCE,
         WorkflowState.DRAFTING_RESPONSE,
         WorkflowState.CALCULATING_ROUTE,
+        WorkflowState.APPROVED_PENDING_EXECUTION,
+        WorkflowState.EXECUTING_ACTION,
     }
 )
 
@@ -67,6 +78,9 @@ PAUSED_STATES: frozenset[WorkflowState] = frozenset(
         WorkflowState.AWAITING_APPROVAL,
         WorkflowState.NEEDS_INFORMATION,
         WorkflowState.ESCALATED,
+        WorkflowState.APPROVAL_EXPIRED,
+        WorkflowState.ACTION_FAILED,
+        WorkflowState.MANUAL_ACTION_REQUIRED,
     }
 )
 
@@ -78,6 +92,17 @@ TERMINAL_STATES: frozenset[WorkflowState] = frozenset(
         WorkflowState.FAILED_MODEL,
         WorkflowState.CANCELLED,
         WorkflowState.RESOLVED_WITHOUT_ACTION,
+        WorkflowState.APPROVAL_REJECTED,
+        WorkflowState.ACTION_SUCCEEDED,
+    }
+)
+
+# Terminal states that represent a *successful* completion rather than a failure.
+COMPLETED_TERMINAL_STATES: frozenset[WorkflowState] = frozenset(
+    {
+        WorkflowState.RESOLVED_WITHOUT_ACTION,
+        WorkflowState.APPROVAL_REJECTED,
+        WorkflowState.ACTION_SUCCEEDED,
     }
 )
 
@@ -111,7 +136,7 @@ def status_for_state(state: WorkflowState) -> WorkflowStatus:
         return WorkflowStatus.PAUSED
     if state == WorkflowState.CANCELLED:
         return WorkflowStatus.CANCELLED
-    if state == WorkflowState.RESOLVED_WITHOUT_ACTION:
+    if state in COMPLETED_TERMINAL_STATES:
         return WorkflowStatus.COMPLETED
     if state in TERMINAL_STATES:
         return WorkflowStatus.FAILED

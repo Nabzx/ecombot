@@ -71,12 +71,14 @@ def test_paused_and_terminal_states_have_no_transitions() -> None:
 
 @pytest.mark.parametrize("state", sorted(WorkflowState, key=str))
 def test_status_matches_state_partition(state: WorkflowState) -> None:
+    from app.workflows.enums import COMPLETED_TERMINAL_STATES
+
     status = status_for_state(state)
     if state in PAUSED_STATES:
         assert status == WorkflowStatus.PAUSED
     elif state == WorkflowState.CANCELLED:
         assert status == WorkflowStatus.CANCELLED
-    elif state == WorkflowState.RESOLVED_WITHOUT_ACTION:
+    elif state in COMPLETED_TERMINAL_STATES:
         assert status == WorkflowStatus.COMPLETED
     elif state in TERMINAL_STATES:
         assert status == WorkflowStatus.FAILED
@@ -136,7 +138,10 @@ def test_snapshot_preserves_structural_ids() -> None:
     assert "07911123456" not in str(snapshot["raw_customer_message"])
 
 
-def test_no_execute_state_exists() -> None:
+def test_no_action_specific_execute_state_exists() -> None:
+    # A generic ``executing_action`` state is allowed (S6), but no action-specific
+    # execution state (e.g. executing_refund) that would hide what is happening.
     values = {s.value for s in WorkflowState}
-    assert not any(v.startswith("executing_") for v in values)
+    assert "executing_refund" not in values
+    assert "executing_cancellation" not in values
     assert "resolved_without_action" in values

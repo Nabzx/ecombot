@@ -6,6 +6,7 @@ populated (used by Alembic and by test schema creation) and all relationships re
 
 from __future__ import annotations
 
+from app.models.approval import ApprovalDecision, ApprovalRequest
 from app.models.customer import Customer
 from app.models.enums import (
     CustomerTier,
@@ -20,8 +21,10 @@ from app.models.enums import (
     TicketStatus,
     UserRole,
 )
+from app.models.execution import ExecutedAction, RefundLedgerEntry
 from app.models.model_call import ModelCall
 from app.models.order import Order, OrderItem
+from app.models.outbox import OutboxJob
 from app.models.policy import Policy, PolicyChunk, PolicyVersion
 from app.models.product import Product
 from app.models.prompt_version import PromptVersion
@@ -37,13 +40,17 @@ from app.models.workflow import (
 )
 
 __all__ = [
+    "ApprovalDecision",
+    "ApprovalRequest",
     "Customer",
     "CustomerTier",
+    "ExecutedAction",
     "MessageSender",
     "ModelCall",
     "Order",
     "OrderItem",
     "OrderStatus",
+    "OutboxJob",
     "Policy",
     "PolicyChunk",
     "PolicySourceType",
@@ -53,6 +60,7 @@ __all__ = [
     "ProductCategory",
     "PromptVersion",
     "ProposedAction",
+    "RefundLedgerEntry",
     "Shipment",
     "ShipmentStatus",
     "Ticket",
