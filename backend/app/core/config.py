@@ -72,10 +72,42 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
-    # --- Model provider (future stages) --------------------------------------
-    llm_provider: Literal["mock", "ollama", "hosted"] = "mock"
+    # --- Model layer / providers (S4) ----------------------------------------
+    # The deterministic mock provider is the default everywhere: it needs no network,
+    # no model download and no secrets, and it is the only provider CI relies on.
+    llm_default_provider: Literal["mock", "ollama", "hosted"] = "mock"
+    llm_default_model: str = "mock-deterministic-v1"
+    # Fallback order tried on retryable provider failures. Comma-separated in the env.
+    # Mock is always appended as the final safety net so the system never hard-fails.
+    llm_fallback_order: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["mock"]
+    )
+    llm_fallback_enabled: bool = True
+
+    # Mock provider is always available; the others are opt-in and fail clearly if
+    # selected without their dependency/credentials.
+    llm_mock_enabled: bool = True
+    llm_ollama_enabled: bool = False
     ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.1"
+    llm_hosted_enabled: bool = False
+    hosted_provider_base_url: str | None = None
+    hosted_provider_model: str = "gpt-4o-mini"
     hosted_provider_api_key: str | None = None
+
+    # Timeouts / retries / bounds (all enforced across retries and fallback).
+    llm_request_timeout_seconds: float = 30.0
+    llm_total_deadline_seconds: float = 90.0
+    llm_max_retries: int = 2
+    llm_default_temperature: float = 0.0
+    llm_max_input_chars: int = 24_000
+    llm_max_output_tokens: int = 1_024
+
+    # Persistence / safety toggles. Redaction cannot be disabled outside a non-prod env.
+    llm_prompt_persistence_enabled: bool = True
+    llm_raw_output_persistence_enabled: bool = False
+    llm_pii_redaction_enabled: bool = True
+    llm_cost_table_version: str = "price-table-2026-07"
 
     # --- Policy retrieval / embeddings (S3) -----------------------------------
     # deterministic_hash requires no model/network (default; used in CI). The optional
@@ -98,10 +130,43 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("llm_fallback_order", mode="before")
+    @classmethod
+    def _split_fallback_order(cls, value: object) -> object:
+        """Accept a comma-separated string as well as a JSON list for fallback order."""
+        if isinstance(value, str) and not value.startswith("["):
+            return [name.strip() for name in value.split(",") if name.strip()]
+        return value
+
     @field_validator("log_level")
     @classmethod
     def _normalise_log_level(cls, value: str) -> str:
         return value.upper()
+
+    @model_validator(mode="after")
+    def _validate_provider_config(self) -> Settings:
+        """Fail clearly on invalid provider names or an unusable configuration."""
+        valid = {"mock", "ollama", "hosted"}
+        unknown = [name for name in self.llm_fallback_order if name not in valid]
+        if unknown:
+            raise ValueError(
+                f"LLM_FALLBACK_ORDER contains unknown providers: {unknown}. "
+                f"Valid providers: {sorted(valid)}"
+            )
+        if self.llm_default_provider not in valid:
+            raise ValueError(
+                f"LLM_DEFAULT_PROVIDER {self.llm_default_provider!r} is not valid"
+            )
+        if not self.llm_mock_enabled:
+            raise ValueError(
+                "LLM_MOCK_ENABLED must be true: the deterministic mock provider is the "
+                "required safety net for CI, tests and fallback."
+            )
+        if self.llm_max_retries < 0:
+            raise ValueError("LLM_MAX_RETRIES must be >= 0")
+        if not 0.0 <= self.llm_default_temperature <= 2.0:
+            raise ValueError("LLM_DEFAULT_TEMPERATURE must be within [0, 2]")
+        return self
 
     @model_validator(mode="after")
     def _guard_production_secrets(self) -> Settings:
