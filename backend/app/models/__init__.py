@@ -20,9 +20,11 @@ from app.models.enums import (
     TicketStatus,
     UserRole,
 )
+from app.models.model_call import ModelCall
 from app.models.order import Order, OrderItem
 from app.models.policy import Policy, PolicyChunk, PolicyVersion
 from app.models.product import Product
+from app.models.prompt_version import PromptVersion
 from app.models.shipment import Shipment
 from app.models.ticket import Ticket, TicketMessage
 from app.models.user import User
@@ -31,6 +33,7 @@ __all__ = [
     "Customer",
     "CustomerTier",
     "MessageSender",
+    "ModelCall",
     "Order",
     "OrderItem",
     "OrderStatus",
@@ -41,6 +44,7 @@ __all__ = [
     "PolicyVersion",
     "Product",
     "ProductCategory",
+    "PromptVersion",
     "Shipment",
     "ShipmentStatus",
     "Ticket",

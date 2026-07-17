@@ -7,6 +7,7 @@ system instructions, only placed inside the untrusted blocks the template define
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.prompts.models import PLACEHOLDER_RE, PromptDefinition
@@ -28,7 +29,7 @@ class RenderedPrompt:
 
 
 def render_prompt(
-    definition: PromptDefinition, context: dict[str, object]
+    definition: PromptDefinition, context: Mapping[str, object]
 ) -> RenderedPrompt:
     """Render ``definition`` with ``context``. Raises on missing/unknown variables."""
     required = set(definition.required_context_fields)

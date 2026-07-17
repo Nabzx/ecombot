@@ -185,7 +185,7 @@ class MockProvider:
             return "Sure! Here is the answer: {not-json at all"
         if scenario == "markdown_fenced":
             return f"```json\n{json.dumps(result, sort_keys=True)}\n```"
-        if scenario in {"missing_field", "repair_ok"}:
+        if scenario in {"missing_field", "repair_ok", "repair_fail"}:
             # Drop a required field so validation fails and repair is triggered.
             corrupted = dict(result)
             for key in ("category", "customer_intent", "body", "summary", "tool_calls"):
