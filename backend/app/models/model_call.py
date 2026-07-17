@@ -41,6 +41,7 @@ class ModelCall(UUIDPKMixin, TimestampMixin, Base):
         Index("ix_model_calls_correlation", "correlation_id"),
         Index("ix_model_calls_status", "status"),
         Index("ix_model_calls_created_at", "created_at"),
+        Index("ix_model_calls_workflow_run", "workflow_run_id"),
     )
 
     ticket_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -48,9 +49,17 @@ class ModelCall(UUIDPKMixin, TimestampMixin, Base):
         ForeignKey("tickets.id", ondelete="SET NULL"),
         nullable=True,
     )
-    # Reserved for S5's workflow engine; deliberately without a FK/table yet.
+    # Linked to the workflow engine in S5 (nullable: model tasks are also callable
+    # standalone from the CLI/dev API without a workflow).
     workflow_run_id: Mapped[uuid.UUID | None] = mapped_column(
-        PGUUID(as_uuid=True), nullable=True
+        PGUUID(as_uuid=True),
+        ForeignKey("workflow_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    workflow_step_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("workflow_steps.id", ondelete="SET NULL"),
+        nullable=True,
     )
     task_type: Mapped[ModelTaskType] = mapped_column(
         pg_enum(ModelTaskType, "model_task_type"), nullable=False

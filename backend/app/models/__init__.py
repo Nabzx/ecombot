@@ -28,6 +28,13 @@ from app.models.prompt_version import PromptVersion
 from app.models.shipment import Shipment
 from app.models.ticket import Ticket, TicketMessage
 from app.models.user import User
+from app.models.workflow import (
+    ProposedAction,
+    WorkflowCheckpoint,
+    WorkflowRun,
+    WorkflowStep,
+    WorkflowToolCall,
+)
 
 __all__ = [
     "Customer",
@@ -45,6 +52,7 @@ __all__ = [
     "Product",
     "ProductCategory",
     "PromptVersion",
+    "ProposedAction",
     "Shipment",
     "ShipmentStatus",
     "Ticket",
@@ -54,4 +62,8 @@ __all__ = [
     "TicketStatus",
     "User",
     "UserRole",
+    "WorkflowCheckpoint",
+    "WorkflowRun",
+    "WorkflowStep",
+    "WorkflowToolCall",
 ]
