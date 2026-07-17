@@ -63,6 +63,9 @@ class ModelTaskRequest:
     correlation_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     ticket_id: uuid.UUID | None = None
     requested_provider: str | None = None
+    # Optional workflow linkage (S5). Standalone CLI/API calls leave these None.
+    workflow_run_id: uuid.UUID | None = None
+    workflow_step_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -73,6 +76,7 @@ class ModelTaskResult:
     task_type: ModelTaskType
     correlation_id: str
     output: BaseModel | None = None
+    model_call_id: uuid.UUID | None = None
     provider: str = ""
     model: str = ""
     requested_provider: str = ""
@@ -244,7 +248,7 @@ class ModelService:
             repair_count=repair_count,
             warnings=warnings,
         )
-        await self._persist(
+        result.model_call_id = await self._persist(
             request,
             prompt=prompt,
             status=(
@@ -398,9 +402,9 @@ class ModelService:
         started_at: datetime,
         session: AsyncSession | None,
         error: ModelError | None,
-    ) -> None:
+    ) -> uuid.UUID | None:
         if session is None or not self._settings.llm_prompt_persistence_enabled:
-            return
+            return None
         from app.prompts.models import PromptDefinition  # local import for typing
 
         assert isinstance(prompt, PromptDefinition)  # noqa: S101 - narrow type
@@ -410,9 +414,11 @@ class ModelService:
             if self._settings.llm_raw_output_persistence_enabled
             else None
         )
-        await record_model_call(
+        call = await record_model_call(
             session,
             ticket_id=request.ticket_id,
+            workflow_run_id=request.workflow_run_id,
+            workflow_step_id=request.workflow_step_id,
             task_type=request.task_type,
             provider=routed.actual_provider,
             model=routed.response.model_name,
@@ -439,6 +445,7 @@ class ModelService:
             started_at=started_at,
             finished_at=datetime.now(UTC),
         )
+        return call.id
 
     @staticmethod
     def _log(result: ModelTaskResult) -> None:

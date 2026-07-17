@@ -42,8 +42,10 @@ class SupportWorkflowState(BaseModel):
     # derived / trusted facts
     classification: dict[str, object] | None = None
     identifier_candidates: dict[str, object] | None = None
-    resolved_customer_id: uuid.UUID | None = None
-    resolved_order_id: uuid.UUID | None = None
+    # Stored as strings (JSON-native) since they are filled progressively via state
+    # fragments; converted to UUID at point of use.
+    resolved_customer_id: str | None = None
+    resolved_order_id: str | None = None
     customer_match_count: int = 0
     order_match_count: int = 0
     ownership_result: dict[str, object] | None = None

@@ -60,6 +60,8 @@ async def record_model_call(
     *,
     ticket_id: uuid.UUID | None,
     task_type: object,
+    workflow_run_id: uuid.UUID | None = None,
+    workflow_step_id: uuid.UUID | None = None,
     provider: str,
     model: str,
     prompt_version_id: uuid.UUID | None,
@@ -88,6 +90,8 @@ async def record_model_call(
     """Insert one model-call audit row from an already-redacted payload."""
     row = ModelCall(
         ticket_id=ticket_id,
+        workflow_run_id=workflow_run_id,
+        workflow_step_id=workflow_step_id,
         task_type=task_type,
         provider=provider,
         model=model,
