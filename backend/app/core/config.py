@@ -17,7 +17,8 @@ Environment = Literal["development", "test", "production"]
 
 # Explicitly labelled development-only secret. It is safe to commit because it is
 # obviously not a real secret; the production validator below refuses to boot with it.
-DEV_ONLY_JWT_SECRET = "dev-only-insecure-change-me"  # noqa: S105 - labelled dev value
+# >= 32 bytes so HS256 does not warn; still obviously a non-production value.
+DEV_ONLY_JWT_SECRET = "dev-only-insecure-change-me-0123456789ab"  # noqa: S105
 
 
 class Settings(BaseSettings):
@@ -67,10 +68,26 @@ class Settings(BaseSettings):
     # tooling. Enable explicitly when diagnosing queries.
     db_echo: bool = False
 
-    # --- Auth (used from a later stage; placeholders only for now) -----------
+    # --- Auth / JWT (S6) -----------------------------------------------------
     jwt_secret: str = DEV_ONLY_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    refresh_token_expire_minutes: int = 720
+
+    # --- Approvals / outbox worker (S6) --------------------------------------
+    approval_expiry_hours: int = 24
+    manual_retry_max: int = 3
+
+    worker_enabled: bool = True
+    worker_id: str = "outbox-worker-1"
+    worker_poll_interval_seconds: float = 1.0
+    worker_batch_size: int = 5
+    outbox_lease_seconds: int = 60
+    outbox_max_attempts: int = 5
+    outbox_retry_base_seconds: float = 2.0
+    worker_shutdown_timeout_seconds: float = 10.0
+    # Deterministic failure injection for tests/eval only (empty = disabled).
+    outbox_failure_injection: str = ""
 
     # --- Model layer / providers (S4) ----------------------------------------
     # The deterministic mock provider is the default everywhere: it needs no network,

@@ -79,7 +79,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops
       TEST_DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops_test
-      JWT_SECRET: ci-only-secret
+      JWT_SECRET: ci-only-secret-0123456789abcdefghij
       # Force deterministic mock mode: CI never needs Ollama, a hosted key or the internet.
       LLM_DEFAULT_PROVIDER: mock
       LLM_FALLBACK_ORDER: mock
