@@ -149,5 +149,8 @@ jobs:
       - name: Model-layer evaluation (mock mode, enforces hard safety gates)
         run: uv run python -m app.llm.evaluation
 
-      - name: Run tests (models, rules, tools, retrieval, model layer)
+      - name: Workflow evaluation (mock mode, enforces hard safety gates)
+        run: uv run python -m app.workflows.evaluation
+
+      - name: Run tests (models, rules, tools, retrieval, model layer, workflows)
         run: uv run pytest

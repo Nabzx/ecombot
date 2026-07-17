@@ -9,15 +9,49 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S4 — Provider Abstraction, Structured Outputs & Prompt System.** On top
-> of S0–S3, this stage adds a **provider-independent, measurable, safely constrained model
-> layer**: a deterministic mock provider (default; optional Ollama and hosted adapters),
-> versioned prompts with deterministic hashes, strictly-validated structured outputs with one
-> bounded repair, and five independently callable model tasks (classify, extract identifiers,
-> plan read-only tools, summarise evidence, draft a grounded response) plus a decision
-> summary. **Every model output is a proposal** — deterministic rules, permissions and later
-> human approval remain authoritative. No workflow engine, approvals, outbox or execution
-> exist yet (that is S5+).
+> **Current stage: S5 — Workflow State Machine, Checkpointing & Replay.** On top of S0–S4,
+> this stage composes the model tasks, deterministic tools, retrieval and rules into an
+> **explicit, durable, resumable and replayable** support-ticket workflow that safely reaches
+> a human-review, approval, escalation, needs-information or terminal boundary. It adds a
+> versioned state machine, durable hashed checkpoints, lease-based concurrency control, safe
+> resume/crash-recovery, deterministic replay with diffing, and persisted proposed actions.
+> **The engine orchestrates; it is not the authority** — deterministic rules decide
+> ownership/eligibility/risk/route, and **no consequential action is executed** (that is S6:
+> approvals, outbox, execution).
+
+## Workflow engine (S5)
+
+An explicit `support-ticket-v1` state machine that runs a ticket through validation,
+sanitisation, classification, identifier extraction, customer/order resolution, order-data
+and policy retrieval, deterministic rule evaluation, evidence summary, grounded drafting and
+routing — pausing at `awaiting_agent`, `awaiting_approval`, `needs_information` or `escalated`,
+or terminating at `blocked` / `failed_*` / `cancelled` / `resolved_without_action`.
+
+- **State machine** (`app/workflows/definition.py`): versioned transition table; branches
+  chosen from typed results (never model text) and validated before persistence. See
+  [docs/workflow-state-machine.md](docs/workflow-state-machine.md).
+- **Runner & handlers** (`app/workflows/runner.py`, `handlers.py`): twelve step handlers,
+  short transactions (started → commit → work → completed+checkpoint → commit), and a
+  reused deterministic `inspect_ticket` authority. See
+  [docs/workflow-engine.md](docs/workflow-engine.md).
+- **Durability** (`app/workflows/checkpointing.py`): immutable, redacted, SHA-256-hashed
+  checkpoints with tamper rejection and safe resume/crash recovery; lease-based claiming with
+  `FOR UPDATE SKIP LOCKED`. See [docs/workflow-recovery.md](docs/workflow-recovery.md).
+- **Replay** (`app/workflows/service.py`): a new run linked to an immutable source, with a
+  field-by-field diff. See [docs/workflow-replay.md](docs/workflow-replay.md).
+- **Persistence**: `workflow_runs`, `workflow_checkpoints`, `workflow_steps`,
+  `workflow_tool_calls` and `proposed_actions` (proposals only — never approved or executed).
+- **Evaluation** (66 cases, 8 hard gates): all safety gates pass at 0; the six demos reach
+  their exact expected states. See [docs/workflow-evaluation.md](docs/workflow-evaluation.md).
+
+```bash
+make list-workflows
+make workflow-demo FIXTURE=DEMO-TRACKING-001
+make workflow-demo FIXTURE=DEMO-REFUND-APPROVAL-001
+make workflow-demo FIXTURE=DEMO-PROMPT-INJECTION-001
+make workflow-demo FIXTURE=DEMO-CROSS-CUSTOMER-001
+make eval-workflows
+```
 
 ## Model layer (S4)
 
@@ -265,6 +299,11 @@ Via `make` (see `make help`) or the underlying commands directly:
 | Model demo          | `make model-demo FIXTURE=DEMO-REFUND-APPROVAL-001` | `... python -m app.llm.cli run-demo ...`   |
 | Model-call stats    | `make model-stats` | `... python -m app.llm.cli stats`                            |
 | Model-layer eval    | `make eval-model-layer` | `... python -m app.llm.evaluation` (6 hard gates)        |
+| List workflow       | `make list-workflows` | `... python -m app.workflows.cli list-definitions`         |
+| Workflow demo       | `make workflow-demo FIXTURE=DEMO-TRACKING-001` | `... python -m app.workflows.cli run-demo ...` |
+| Workflow start      | `make workflow-start TICKET=TKT-2026-000001` | `... python -m app.workflows.cli start ...` |
+| Workflow stats      | `make workflow-stats` | `... python -m app.workflows.cli stats`                    |
+| Workflow eval       | `make eval-workflows` | `... python -m app.workflows.evaluation` (8 hard gates)    |
 | Backend tests       | `make test-backend`  | `cd backend && uv run pytest`                                |
 | Frontend tests      | `make test-frontend` | `cd frontend && npm run test`                                |
 | Lint                | `make lint`        | `ruff format --check . && ruff check .` / `npm run lint`       |
@@ -299,16 +338,18 @@ the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector
 applies migrations, seeds the synthetic data, runs the integrity check, and runs the
 full pytest suite. Nothing in CI requires paid APIs.
 
-## Current limitations (S4)
+## Current limitations (S5)
 
-- The model layer proposes; it does **not** decide eligibility, approve, execute, update
-  tickets or orchestrate a workflow. There is **no workflow engine, approvals, outbox or
-  execution** yet, and the frontend is still the S0 status page.
+- The workflow **orchestrates and proposes**; it does not approve, execute, move money,
+  dispatch replacements, send customer emails or update ticket status. It stops at
+  `awaiting_agent` / `awaiting_approval` / `needs_information` / `escalated` or a terminal
+  state. **No approval decision, outbox or consequential execution exists** (that is S6), and
+  the frontend is still the S0 status page.
 - The default provider is a deterministic **mock**, not a language model: it exercises the
-  system (parsing, validation, safety, persistence) rather than demonstrating language
-  quality. Ollama/hosted are optional and never required for tests or CI.
-- Workflow / approval / outbox / audit **tables are deferred** to the stages that first use
-  them; `model_calls.workflow_run_id` is a nullable, FK-less column reserved for S5.
+  engine (routing, checkpoints, safety, recovery) rather than demonstrating language quality.
+  Ollama/hosted are optional and never required for tests or CI.
+- Approval / outbox / audit **tables are deferred** to S6+. `workflow_runs` links to model
+  calls; `proposed_actions` are stored but never `approved`/`executed`.
 - `JWT_SECRET` in `.env.example` is a labelled development placeholder; authentication
   is not wired up yet.
 - The synthetic dataset is anchored to a fixed reference date (2026-07-16), so
@@ -320,8 +361,8 @@ full pytest suite. Nothing in CI requires paid APIs.
 ## Roadmap
 
 S0 Foundations → S1 Domain & Synthetic Data → S2 Deterministic Tools & Business Rules →
-S3 Policy Retrieval & Evidence Grounding → **S4 Provider Abstraction & Prompt System (this
-stage)** → S5 Workflow state machine & checkpointing → S6 Human-in-the-loop & outbox → S7
-Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
+S3 Policy Retrieval & Evidence Grounding → S4 Provider Abstraction & Prompt System →
+**S5 Workflow State Machine & Checkpointing (this stage)** → S6 Human Approval & Durable
+Action Execution → S7 Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
 
-**Next up: S5 — Workflow State Machine & Checkpointing.**
+**Next up: S6 — Human Approval and Durable Action Execution.**
