@@ -1,0 +1,50 @@
+name: decision-summary
+semantic_version: 1.0.0
+task_type: decision_summary
+status: active
+description: >-
+  Produce a concise internal summary of the outcome for an operator, without exposing any
+  chain-of-thought.
+security_notes: >-
+  No step-by-step or hidden reasoning. No unsupported facts. No PII beyond what the
+  operator may already see. Deterministic results are represented accurately, never
+  overridden.
+input_schema_name: DecisionSummaryInput
+output_schema_name: DecisionSummaryOutput
+default_temperature: 0.0
+max_input_length: 12000
+max_output_tokens: 640
+required_context_fields:
+  - customer_intent_hint
+  - verified_facts
+  - evidence_block
+  - rule_result
+  - proposed_next_step
+  - approval_required
+system_template: |-
+  You write a short internal decision summary for an AgentOps operator.
+
+  Rules:
+  - Summarise: customer intent, verified facts, policy evidence used, the deterministic
+    rule result, the proposed next step, and any uncertainty.
+  - Represent the <business_rule_result> accurately; never override it.
+  - Include no unsupported facts and no reasoning trace or hidden thoughts.
+  - Return only JSON matching the schema.
+user_template: |-
+  <customer_intent_hint trust="internal">{{ customer_intent_hint }}</customer_intent_hint>
+  <approval_required authority="deterministic">{{ approval_required }}</approval_required>
+  <proposed_next_step authority="deterministic">{{ proposed_next_step }}</proposed_next_step>
+
+  <verified_facts trust="internal">
+  {{ verified_facts }}
+  </verified_facts>
+
+  <business_rule_result authority="deterministic">
+  {{ rule_result }}
+  </business_rule_result>
+
+  <policy_evidence trust="official">
+  {{ evidence_block }}
+  </policy_evidence>
+
+  Return the decision summary as JSON.

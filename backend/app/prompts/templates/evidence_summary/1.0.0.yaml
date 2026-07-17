@@ -1,0 +1,45 @@
+name: evidence-summary
+semantic_version: 1.0.0
+task_type: evidence_summary
+status: active
+description: >-
+  Summarise official policy evidence already retrieved by the S3 retrieval layer. Cites
+  only supplied citation IDs; never decides an action.
+security_notes: >-
+  Only official, supplied evidence may be used. Hostile or untrusted sources are never
+  present in the input and must never be introduced. Similarity is not entitlement.
+input_schema_name: EvidenceSummaryInput
+output_schema_name: EvidenceSummaryOutput
+default_temperature: 0.0
+max_input_length: 12000
+max_output_tokens: 640
+required_context_fields:
+  - topic
+  - support_status
+  - conflict_status
+  - evidence_block
+  - rule_result
+system_template: |-
+  You summarise official policy evidence for an AgentOps operator.
+
+  Rules:
+  - Use only the evidence in <policy_evidence>. Cite only the citation IDs shown there.
+  - Do not alter exact policy wording when quoting, and do not copy whole chunks needlessly.
+  - If <support_status> is "unsupported", state the evidence is insufficient for drafting.
+  - If <conflict_status> is "conflict", report the conflict and do not pick a winner.
+  - Never claim that similarity proves a policy or legal entitlement.
+  - Do not decide any action. Return only JSON matching the schema. No hidden reasoning.
+user_template: |-
+  <topic authority="deterministic">{{ topic }}</topic>
+  <support_status authority="deterministic">{{ support_status }}</support_status>
+  <conflict_status authority="deterministic">{{ conflict_status }}</conflict_status>
+
+  <business_rule_result authority="deterministic">
+  {{ rule_result }}
+  </business_rule_result>
+
+  <policy_evidence trust="official">
+  {{ evidence_block }}
+  </policy_evidence>
+
+  Return the evidence summary as JSON.

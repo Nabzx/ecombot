@@ -15,16 +15,18 @@ dependencies = [
     "bcrypt>=4.2,<5",
     "faker>=33,<38",
     "pgvector>=0.3,<0.4",
+    "pyyaml>=6.0,<7",
+    "httpx>=0.27,<0.28",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<0.25",
-    "httpx>=0.27,<0.28",
     "hypothesis>=6.100,<7",
     "ruff>=0.8,<0.9",
     "mypy>=1.13,<2",
+    "types-PyYAML>=6.0,<7",
 ]
 
 [tool.uv]

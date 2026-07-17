@@ -1,0 +1,45 @@
+name: structured-output-repair
+semantic_version: 1.0.0
+task_type: structured_output_repair
+status: active
+description: >-
+  Repair a single invalid structured output so it conforms to the target schema, preserving
+  meaning. Used at most once per call.
+security_notes: >-
+  Repair only reshapes the invalid output to the schema. It must not invent evidence, alter
+  deterministic rule results, or add tools outside the allowlist.
+input_schema_name: RepairInput
+output_schema_name: RepairOutput
+default_temperature: 0.0
+max_input_length: 16000
+max_output_tokens: 1024
+required_context_fields:
+  - task_name
+  - output_schema
+  - invalid_output
+  - validation_errors
+system_template: |-
+  You repair a single malformed structured output for AgentOps.
+
+  Rules:
+  - Return only corrected JSON that satisfies the target schema. Return nothing else.
+  - Preserve the original meaning where possible.
+  - Do not invent missing evidence, do not alter deterministic rule results, and do not add
+    tools outside the original allowlist.
+  - Do not add commentary or hidden reasoning.
+user_template: |-
+  <target_task authority="deterministic">{{ task_name }}</target_task>
+
+  <output_schema authority="deterministic">
+  {{ output_schema }}
+  </output_schema>
+
+  <validation_errors authority="deterministic">
+  {{ validation_errors }}
+  </validation_errors>
+
+  <invalid_output trust="untrusted">
+  {{ invalid_output }}
+  </invalid_output>
+
+  Return only the corrected JSON.
