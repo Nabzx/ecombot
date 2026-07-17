@@ -18,7 +18,9 @@ from app.llm.providers.ollama import OllamaProvider
 from app.llm.router import ProviderRouter
 
 
-def _request(task: ModelTaskType, payload: dict, scenario: str = "") -> ModelRequest:
+def _request(
+    task: ModelTaskType, payload: dict[str, object], scenario: str = ""
+) -> ModelRequest:
     meta = {"mock_payload": json.dumps(payload)}
     if scenario:
         meta["mock_scenario"] = scenario
@@ -44,6 +46,7 @@ async def test_mock_is_deterministic() -> None:
 async def test_mock_covers_every_task() -> None:
     mock = MockProvider()
     for task in ModelTaskType:
+        payload: dict[str, object]
         if task == ModelTaskType.STRUCTURED_OUTPUT_REPAIR:
             payload = {"target_task": "ticket_classification", "original_payload": {}}
         else:

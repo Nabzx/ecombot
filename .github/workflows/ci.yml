@@ -80,6 +80,11 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops
       TEST_DATABASE_URL: postgresql+asyncpg://agentops:agentops@localhost:5432/agentops_test
       JWT_SECRET: ci-only-secret
+      # Force deterministic mock mode: CI never needs Ollama, a hosted key or the internet.
+      LLM_DEFAULT_PROVIDER: mock
+      LLM_FALLBACK_ORDER: mock
+      LLM_OLLAMA_ENABLED: "false"
+      LLM_HOSTED_ENABLED: "false"
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -141,5 +146,8 @@ jobs:
       - name: Retrieval evaluation (enforces hard gates)
         run: uv run python -m app.retrieval.cli eval
 
-      - name: Run tests (models, rules, tools, retrieval)
+      - name: Model-layer evaluation (mock mode, enforces hard safety gates)
+        run: uv run python -m app.llm.evaluation
+
+      - name: Run tests (models, rules, tools, retrieval, model layer)
         run: uv run pytest

@@ -9,13 +9,48 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S3 — Policy Retrieval & Evidence Grounding.** On top of S0–S2, this
-> stage adds **version-aware hybrid policy retrieval with citations**: policy documents are
-> chunked, indexed (PostgreSQL full-text + pgvector), and retrieved via Reciprocal Rank
-> Fusion, returning exact citations plus support/conflict status. **Retrieval finds and
-> cites evidence; it does not generate a customer answer** (that is S4+), and the
-> deterministic layer still decides which policy is active and whether policies conflict.
-> No LLM, answer generation, workflow engine, approvals or outbox are implemented yet.
+> **Current stage: S4 — Provider Abstraction, Structured Outputs & Prompt System.** On top
+> of S0–S3, this stage adds a **provider-independent, measurable, safely constrained model
+> layer**: a deterministic mock provider (default; optional Ollama and hosted adapters),
+> versioned prompts with deterministic hashes, strictly-validated structured outputs with one
+> bounded repair, and five independently callable model tasks (classify, extract identifiers,
+> plan read-only tools, summarise evidence, draft a grounded response) plus a decision
+> summary. **Every model output is a proposal** — deterministic rules, permissions and later
+> human approval remain authoritative. No workflow engine, approvals, outbox or execution
+> exist yet (that is S5+).
+
+## Model layer (S4)
+
+A provider-neutral model layer that can classify tickets, extract candidate identifiers,
+propose read-only tool calls, summarise evidence and draft grounded responses — all as
+proposals validated against strict schemas and safety rules.
+
+- **Providers** (`app/llm/providers/`): a typed async `ModelProvider` Protocol with a
+  deterministic **mock** default (no network, no secrets, CI/tests/eval), plus optional
+  **Ollama** and generic **hosted** OpenAI-compatible adapters that fail clearly when
+  unavailable. Capability-driven, with recorded routing/fallback and bounded retries. See
+  [docs/model-providers.md](docs/model-providers.md).
+- **Prompts** (`app/prompts/`): versioned YAML templates with deterministic hashes,
+  immutability, safe `{{ var }}` rendering (no code execution) and trusted/untrusted data
+  boundaries. See [docs/prompt-system.md](docs/prompt-system.md).
+- **Tasks** (`app/llm/`): five tasks + decision summary + repair, each with strict Pydantic
+  I/O and semantic safety validation (tool allowlist, citations ⊆ supplied, action ∈ allowed
+  list, no false execution claim). Proposed actions contain **no** execute/approve values.
+  See [docs/model-tasks.md](docs/model-tasks.md).
+- **Persistence**: `prompt_versions` and `model_calls` tables record what was used with
+  redaction applied (email/phone/card/JWT/keys/DB-URLs), integer GBP-microunit cost, token
+  provenance and fallback/repair metadata. No secrets, PII or hidden reasoning are stored.
+- **Evaluation** (80 cases, 6 hard gates): all safety gates pass at 0 unsafe outcomes with
+  the deterministic mock. See [docs/model-evaluation.md](docs/model-evaluation.md).
+
+```bash
+make list-providers
+make list-model-tasks
+make list-prompts
+make model-demo FIXTURE=DEMO-REFUND-APPROVAL-001
+make model-demo FIXTURE=DEMO-PROMPT-INJECTION-001
+make eval-model-layer
+```
 
 ## Policy retrieval (S3)
 
@@ -223,6 +258,13 @@ Via `make` (see `make help`) or the underlying commands directly:
 | Verify policy index | `make verify-policy-index` | `... python -m app.retrieval.cli verify`              |
 | Search policies     | `make search-policies QUERY="..."` | `... python -m app.retrieval.cli search "..."`|
 | Retrieval eval      | `make eval-retrieval` | `... python -m app.retrieval.cli eval` (hard gates)        |
+| List providers      | `make list-providers` | `... python -m app.llm.cli list-providers`                 |
+| List model tasks    | `make list-model-tasks` | `... python -m app.llm.cli list-tasks`                   |
+| List prompts        | `make list-prompts` | `... python -m app.llm.cli list-prompts`                     |
+| Classify a ticket   | `make classify-ticket TICKET=TKT-2026-000001` | `... python -m app.llm.cli classify-ticket ...` |
+| Model demo          | `make model-demo FIXTURE=DEMO-REFUND-APPROVAL-001` | `... python -m app.llm.cli run-demo ...`   |
+| Model-call stats    | `make model-stats` | `... python -m app.llm.cli stats`                            |
+| Model-layer eval    | `make eval-model-layer` | `... python -m app.llm.evaluation` (6 hard gates)        |
 | Backend tests       | `make test-backend`  | `cd backend && uv run pytest`                                |
 | Frontend tests      | `make test-frontend` | `cd frontend && npm run test`                                |
 | Lint                | `make lint`        | `ruff format --check . && ruff check .` / `npm run lint`       |
@@ -257,15 +299,16 @@ the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector
 applies migrations, seeds the synthetic data, runs the integrity check, and runs the
 full pytest suite. Nothing in CI requires paid APIs.
 
-## Current limitations (S3)
+## Current limitations (S4)
 
-- The domain model and synthetic data exist, but there is **no AI, no tools, no
-  retrieval, no business rules, no approvals and no dashboard** yet — the frontend is
-  still the S0 status page.
-- The later-stage packages under `backend/app/` (tools, rules, workflows, providers,
-  approvals, outbox, tracing, audit, evaluations) are intentionally empty placeholders.
-- Workflow / approval / outbox / audit / evaluation **tables are deferred** to the
-  stages that first use them (see [docs/domain-model.md](docs/domain-model.md)).
+- The model layer proposes; it does **not** decide eligibility, approve, execute, update
+  tickets or orchestrate a workflow. There is **no workflow engine, approvals, outbox or
+  execution** yet, and the frontend is still the S0 status page.
+- The default provider is a deterministic **mock**, not a language model: it exercises the
+  system (parsing, validation, safety, persistence) rather than demonstrating language
+  quality. Ollama/hosted are optional and never required for tests or CI.
+- Workflow / approval / outbox / audit **tables are deferred** to the stages that first use
+  them; `model_calls.workflow_run_id` is a nullable, FK-less column reserved for S5.
 - `JWT_SECRET` in `.env.example` is a labelled development placeholder; authentication
   is not wired up yet.
 - The synthetic dataset is anchored to a fixed reference date (2026-07-16), so
@@ -277,8 +320,8 @@ full pytest suite. Nothing in CI requires paid APIs.
 ## Roadmap
 
 S0 Foundations → S1 Domain & Synthetic Data → S2 Deterministic Tools & Business Rules →
-**S3 Policy Retrieval & Evidence Grounding (this stage)** → S4 Provider Abstraction &
-Prompt System → S5 Workflow state machine → S6 Human-in-the-loop & outbox → S7
+S3 Policy Retrieval & Evidence Grounding → **S4 Provider Abstraction & Prompt System (this
+stage)** → S5 Workflow state machine & checkpointing → S6 Human-in-the-loop & outbox → S7
 Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
 
-**Next up: S4 — Provider Abstraction & Prompt System.**
+**Next up: S5 — Workflow State Machine & Checkpointing.**
