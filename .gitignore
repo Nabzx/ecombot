@@ -39,3 +39,4 @@ pgdata/
 # Generated evaluation reports
 evaluations/reports/retrieval/*.json
 evaluations/reports/model_layer/*.json
+evaluations/reports/workflows/*.json

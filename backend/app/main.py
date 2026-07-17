@@ -73,12 +73,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(api_router, prefix=settings.api_prefix)
 
-    # Development-only, read-only inspection endpoints.
+    # Development-only inspection endpoints.
     if settings.environment in ("development", "test"):
-        from app.api.routes import dev_models, dev_retrieval
+        from app.api.routes import dev_models, dev_retrieval, dev_workflows
 
         app.include_router(dev_retrieval.router)
         app.include_router(dev_models.router)
+        app.include_router(dev_workflows.router)
 
     return app
 

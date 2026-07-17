@@ -15,6 +15,8 @@ FRONTEND_DIR := frontend
         search-policies eval-retrieval \
         list-providers list-model-tasks list-prompts show-prompt \
         classify-ticket model-demo model-stats eval-model-layer \
+        list-workflows workflow-start workflow-demo workflow-inspect \
+        workflow-replay workflow-stats eval-workflows \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -113,6 +115,28 @@ model-stats: ## Show persisted model-call statistics
 
 eval-model-layer: ## Run the model-layer evaluation (enforces hard gates)
 	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.llm.evaluation
+
+# --- Workflow engine (S5) ----------------------------------------------------
+list-workflows: ## List the workflow definition and transitions
+	$(COMPOSE) exec backend python -m app.workflows.cli list-definitions
+
+workflow-start: ## Start a workflow: make workflow-start TICKET=TKT-2026-000001
+	$(COMPOSE) exec backend python -m app.workflows.cli start $(TICKET)
+
+workflow-demo: ## Run a workflow demo: make workflow-demo FIXTURE=DEMO-TRACKING-001
+	$(COMPOSE) exec backend python -m app.workflows.cli run-demo $(FIXTURE)
+
+workflow-inspect: ## Inspect a run: make workflow-inspect RUN=<uuid>
+	$(COMPOSE) exec backend python -m app.workflows.cli inspect $(RUN)
+
+workflow-replay: ## Replay a run: make workflow-replay RUN=<uuid>
+	$(COMPOSE) exec backend python -m app.workflows.cli replay $(RUN)
+
+workflow-stats: ## Show workflow run statistics
+	$(COMPOSE) exec backend python -m app.workflows.cli stats
+
+eval-workflows: ## Run the workflow evaluation (enforces hard gates)
+	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.workflows.evaluation
 
 demo-rules: ## Run the deterministic layer over the named demo fixtures
 	@for fx in DEMO-TRACKING-001 DEMO-REFUND-APPROVAL-001 DEMO-RETURN-DAY-30 \

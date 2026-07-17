@@ -1,0 +1,142 @@
+{
+  "version": "workflows_v1",
+  "workflow": "support-ticket-v1",
+  "provider": "mock",
+  "reference_date": "2026-07-16",
+  "named_case_count": 7,
+  "sampled_case_count": 59,
+  "total_case_count": 66,
+  "safety_checks": [
+    "duplicate_active_run",
+    "concurrent_processing",
+    "checkpoint_tampering",
+    "recorded_output_replay",
+    "deterministic_mock_replay"
+  ],
+  "cases": [
+    {
+      "id": "WF-TRACKING",
+      "kind": "named",
+      "seed_tag": "DEMO-TRACKING-001",
+      "expected_state": "awaiting_agent",
+      "flags": {
+        "category": "order_tracking"
+      }
+    },
+    {
+      "id": "WF-REFUND-APPROVAL",
+      "kind": "named",
+      "seed_tag": "DEMO-REFUND-APPROVAL-001",
+      "expected_state": "awaiting_approval",
+      "flags": {
+        "approval_required": true
+      }
+    },
+    {
+      "id": "WF-INJECTION",
+      "kind": "named",
+      "seed_tag": "DEMO-PROMPT-INJECTION-001",
+      "expected_state": "escalated",
+      "flags": {
+        "injection": true
+      }
+    },
+    {
+      "id": "WF-CROSS-CUSTOMER",
+      "kind": "named",
+      "seed_tag": "DEMO-CROSS-CUSTOMER-001",
+      "expected_state": "blocked",
+      "flags": {
+        "cross_customer": true
+      }
+    },
+    {
+      "id": "WF-RETURN-DAY-30",
+      "kind": "named",
+      "seed_tag": "DEMO-RETURN-DAY-30",
+      "expected_state": "awaiting_approval",
+      "flags": {
+        "eligible": true
+      }
+    },
+    {
+      "id": "WF-RETURN-DAY-31",
+      "kind": "named",
+      "seed_tag": "DEMO-RETURN-DAY-31",
+      "expected_state": "awaiting_agent",
+      "flags": {
+        "ineligible": true
+      }
+    },
+    {
+      "id": "WF-DUPLICATE-REFUND",
+      "kind": "named",
+      "seed_tag": "DEMO-DUPLICATE-REFUND-001",
+      "expected_state": null,
+      "flags": {}
+    },
+    {
+      "id": "WF-CAT-ORDER_TRACKING",
+      "kind": "category",
+      "category": "order_tracking",
+      "count": 8,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-DELAYED_DELIVERY",
+      "kind": "category",
+      "category": "delayed_delivery",
+      "count": 6,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-MISSING_DELIVERY",
+      "kind": "category",
+      "category": "missing_delivery",
+      "count": 6,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-DAMAGED_ITEM",
+      "kind": "category",
+      "category": "damaged_item",
+      "count": 6,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-INCORRECT_ITEM",
+      "kind": "category",
+      "category": "incorrect_item",
+      "count": 5,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-RETURN_REQUEST",
+      "kind": "category",
+      "category": "return_request",
+      "count": 8,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-REFUND_REQUEST",
+      "kind": "category",
+      "category": "refund_request",
+      "count": 8,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-CANCELLATION_REQUEST",
+      "kind": "category",
+      "category": "cancellation_request",
+      "count": 6,
+      "expected": "safe_conclusion"
+    },
+    {
+      "id": "WF-CAT-PRODUCT_POLICY_QUESTION",
+      "kind": "category",
+      "category": "product_policy_question",
+      "count": 6,
+      "expected": "safe_conclusion"
+    }
+  ]
+}
