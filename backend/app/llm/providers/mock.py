@@ -284,7 +284,6 @@ class MockProvider:
     def _plan_tools(self, payload: dict[str, Any]) -> dict[str, Any]:
         allowed = list(payload.get("allowed_tools", []))
         category = str(payload.get("category", "unknown"))
-        order_number = payload.get("known_order_number")
         email = payload.get("known_email")
         max_calls = int(payload.get("max_tool_calls", 4))
 
@@ -294,16 +293,13 @@ class MockProvider:
             if tool in allowed and not any(c["tool"] == tool for c in calls):
                 calls.append({"tool": tool, "arguments": arguments, "purpose": purpose})
 
-        if order_number:
-            add("get_order", {"order_number": order_number}, "Look up the order.")
-        elif email:
-            add("search_customer", {"email": email}, "Find the customer by email.")
-        tracking_categories = {"order_tracking", "delayed_delivery", "missing_delivery"}
-        if category in tracking_categories and order_number:
+        # The customer must be identified before their order can be looked up
+        # (ownership), so with only natural-language identifiers the first calls search.
+        if email:
             add(
-                "get_shipment_status",
-                {"order_number": order_number},
-                "Check the shipment status.",
+                "search_customer",
+                {"email": email},
+                "Identify the customer by their email address.",
             )
         if category == "product_policy_question":
             add(
@@ -316,7 +312,7 @@ class MockProvider:
             "tool_calls": calls,
             "requires_more_information": not calls,
             "missing_information": (
-                [] if calls else ["No order number or email to look up."]
+                [] if calls else ["Need the customer's email or ID to look up records."]
             ),
         }
 
