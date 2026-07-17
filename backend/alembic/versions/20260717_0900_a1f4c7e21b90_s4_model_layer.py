@@ -151,9 +151,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["ticket_id"], ["tickets.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["ticket_id"], ["tickets.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(
             ["prompt_version_id"], ["prompt_versions.id"], ondelete="SET NULL"
         ),

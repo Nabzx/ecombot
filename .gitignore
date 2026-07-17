@@ -36,5 +36,6 @@ pgdata/
 .vscode/
 *.swp
 
-# Generated retrieval evaluation reports
+# Generated evaluation reports
 evaluations/reports/retrieval/*.json
+evaluations/reports/model_layer/*.json

@@ -13,6 +13,8 @@ FRONTEND_DIR := frontend
         list-rules list-tools demo-tool demo-rules \
         index-policies reindex-policies policy-index-stats verify-policy-index \
         search-policies eval-retrieval \
+        list-providers list-model-tasks list-prompts show-prompt \
+        classify-ticket model-demo model-stats eval-model-layer \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -86,6 +88,31 @@ search-policies: ## Search policies: make search-policies QUERY="..."
 
 eval-retrieval: ## Run the retrieval evaluation (enforces hard gates)
 	$(COMPOSE) exec backend python -m app.retrieval.cli eval
+
+# --- Model layer (S4) --------------------------------------------------------
+list-providers: ## List configured model providers and capabilities
+	$(COMPOSE) exec backend python -m app.llm.cli list-providers
+
+list-model-tasks: ## List the model tasks and their contracts
+	$(COMPOSE) exec backend python -m app.llm.cli list-tasks
+
+list-prompts: ## List versioned prompts and hashes
+	$(COMPOSE) exec backend python -m app.llm.cli list-prompts
+
+show-prompt: ## Show a prompt: make show-prompt NAME=ticket-classification
+	$(COMPOSE) exec backend python -m app.llm.cli show-prompt $(NAME)
+
+classify-ticket: ## Classify a ticket: make classify-ticket TICKET=TKT-2026-000001
+	$(COMPOSE) exec backend python -m app.llm.cli classify-ticket $(TICKET)
+
+model-demo: ## Run a model demo: make model-demo FIXTURE=DEMO-REFUND-APPROVAL-001
+	$(COMPOSE) exec backend python -m app.llm.cli run-demo $(FIXTURE)
+
+model-stats: ## Show persisted model-call statistics
+	$(COMPOSE) exec backend python -m app.llm.cli stats
+
+eval-model-layer: ## Run the model-layer evaluation (enforces hard gates)
+	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.llm.evaluation
 
 demo-rules: ## Run the deterministic layer over the named demo fixtures
 	@for fx in DEMO-TRACKING-001 DEMO-REFUND-APPROVAL-001 DEMO-RETURN-DAY-30 \
