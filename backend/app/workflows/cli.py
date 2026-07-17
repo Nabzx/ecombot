@@ -180,10 +180,13 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 
 def cmd_run_demo(args: argparse.Namespace) -> int:
-    ref = asyncio.run(_ticket_ref_for_fixture(args.fixture))
-    print(f"=== workflow demo {args.fixture} (ticket {ref}) ===")
-    result = asyncio.run(_service().start(StartWorkflowRequest(ticket_reference=ref)))
-    _print_result(result)
+    async def _go() -> None:
+        ref = await _ticket_ref_for_fixture(args.fixture)
+        print(f"=== workflow demo {args.fixture} (ticket {ref}) ===")
+        result = await _service().start(StartWorkflowRequest(ticket_reference=ref))
+        _print_result(result)
+
+    asyncio.run(_go())
     return 0
 
 

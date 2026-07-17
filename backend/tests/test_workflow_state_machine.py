@@ -69,7 +69,7 @@ def test_paused_and_terminal_states_have_no_transitions() -> None:
         assert next_handler(state) is None
 
 
-@pytest.mark.parametrize("state", sorted(WorkflowState, key=lambda s: s.value))
+@pytest.mark.parametrize("state", sorted(WorkflowState, key=str))
 def test_status_matches_state_partition(state: WorkflowState) -> None:
     status = status_for_state(state)
     if state in PAUSED_STATES:
@@ -133,7 +133,7 @@ def test_snapshot_preserves_structural_ids() -> None:
     # PII in free text is redacted, but the UUID/reference identity survives intact.
     assert snapshot["workflow_run_id"] == str(state.workflow_run_id)
     assert snapshot["ticket_id"] == str(state.ticket_id)
-    assert "07911123456" not in snapshot["raw_customer_message"]
+    assert "07911123456" not in str(snapshot["raw_customer_message"])
 
 
 def test_no_execute_state_exists() -> None:

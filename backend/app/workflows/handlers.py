@@ -452,9 +452,13 @@ async def retrieve_policy(
         )
     data = result.data.model_dump(mode="json")
     raw_citations = data.get("citations", [])
-    citations = (
-        [str(c) for c in raw_citations] if isinstance(raw_citations, list) else []
-    )
+    citations: list[str] = []
+    if isinstance(raw_citations, list):
+        for entry in raw_citations:
+            if isinstance(entry, dict) and "citation_id" in entry:
+                citations.append(str(entry["citation_id"]))
+            else:
+                citations.append(str(entry))
     support = str(data.get("support_status", "unsupported"))
     conflict = str(data.get("conflict_status", "none"))
     fragment: dict[str, object] = {
