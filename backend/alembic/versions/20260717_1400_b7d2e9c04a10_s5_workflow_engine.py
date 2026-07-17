@@ -168,7 +168,7 @@ def upgrade() -> None:
         ["ticket_id", "workflow_name", "workflow_version"],
         unique=True,
         postgresql_where=sa.text(
-            "status IN ('pending', 'running', 'paused')"
+            "status IN ('pending', 'running', 'paused') " "AND trigger_type <> 'replay'"
         ),
     )
 
@@ -236,7 +236,7 @@ def upgrade() -> None:
         sa.Column("workflow_run_id", sa.UUID(), nullable=False),
         sa.Column("workflow_step_id", sa.UUID(), nullable=False),
         sa.Column("tool_name", sa.String(length=100), nullable=False),
-        sa.Column("tool_version", sa.String(length=20), nullable=False),
+        sa.Column("tool_version", sa.String(length=60), nullable=False),
         sa.Column("status", sa.String(length=24), nullable=False),
         sa.Column("input_json", _JSONB, nullable=False),
         sa.Column("output_json", _JSONB, nullable=True),
@@ -293,6 +293,9 @@ def upgrade() -> None:
     op.add_column(
         "model_calls", sa.Column("workflow_step_id", sa.UUID(), nullable=True)
     )
+    # Null any pre-existing workflow_run_id values (they reference a prior, now-dropped
+    # generation of workflow_runs) so adding the FK is safe on a re-upgraded database.
+    op.execute("UPDATE model_calls SET workflow_run_id = NULL")
     op.create_foreign_key(
         "fk_model_calls_workflow_run",
         "model_calls",
@@ -309,9 +312,7 @@ def upgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.create_index(
-        "ix_model_calls_workflow_run", "model_calls", ["workflow_run_id"]
-    )
+    op.create_index("ix_model_calls_workflow_run", "model_calls", ["workflow_run_id"])
 
 
 def downgrade() -> None:
@@ -319,9 +320,7 @@ def downgrade() -> None:
     op.drop_constraint(
         "fk_model_calls_workflow_step", "model_calls", type_="foreignkey"
     )
-    op.drop_constraint(
-        "fk_model_calls_workflow_run", "model_calls", type_="foreignkey"
-    )
+    op.drop_constraint("fk_model_calls_workflow_run", "model_calls", type_="foreignkey")
     op.drop_column("model_calls", "workflow_step_id")
 
     op.drop_table("proposed_actions")

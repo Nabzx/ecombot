@@ -12,14 +12,42 @@ from app.llm.redaction import redact_json
 from app.workflows.definition import STATE_SCHEMA_VERSION
 from app.workflows.state import SupportWorkflowState, snapshot_hash
 
+# Structural identity fields (IDs, versions, enums, reference lists) must never be
+# redacted — a card/phone digit-run inside a UUID would otherwise corrupt it and break
+# resume. Only free-text and nested content dicts are redacted.
+_PRESERVED_FIELDS = (
+    "state_schema_version",
+    "workflow_run_id",
+    "workflow_name",
+    "workflow_version",
+    "ticket_id",
+    "ticket_reference",
+    "correlation_id",
+    "current_state",
+    "current_step",
+    "step_index",
+    "resolved_customer_id",
+    "resolved_order_id",
+    "retrieval_index_version",
+    "policy_citations",
+    "policy_chunk_ids",
+    "model_call_ids",
+    "tool_call_ids",
+    "prompt_versions",
+    "rule_versions",
+)
+
 
 class CheckpointError(Exception):
     """Raised when a checkpoint fails hash verification or schema validation."""
 
 
 def build_snapshot(state: SupportWorkflowState) -> tuple[dict[str, object], str]:
-    """Return the redacted snapshot and its deterministic hash."""
-    redacted = redact_json(state.snapshot())
+    """Return the redacted snapshot (structural IDs preserved) and its hash."""
+    original = state.snapshot()
+    redacted = redact_json(original)
+    for field in _PRESERVED_FIELDS:
+        redacted[field] = original[field]
     return redacted, snapshot_hash(redacted)
 
 

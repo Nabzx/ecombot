@@ -22,8 +22,16 @@ from app.models.enums import TicketCategory
 from app.models.ticket import Ticket
 from app.repositories.order import OrderRepository
 from app.repositories.ticket import TicketRepository
-from app.rules.enums import ApprovalRole, Route
+from app.rules.enums import (
+    ActionType,
+    ApprovalRole,
+    DecisionOutcome,
+    ReasonCode,
+    RiskLevel,
+    Route,
+)
 from app.rules.ownership import OwnershipInput, check_ownership
+from app.rules.routing import RoutingInput, calculate_risk_and_route
 from app.rules.service import inspect_ticket
 from app.tools.context import ToolContext
 from app.tools.enums import READ_PERMISSIONS
@@ -482,33 +490,72 @@ async def retrieve_policy(
 
 
 # --- 10. evaluate rules ------------------------------------------------------------
-def _rule_snapshot(inspection: object) -> dict[str, object]:
-    from app.rules.service import TicketInspection
-
-    assert isinstance(inspection, TicketInspection)  # noqa: S101
-    return {
-        "ownership": inspection.ownership.model_dump(mode="json"),
-        "category_result": (
-            inspection.category_result.model_dump(mode="json")
-            if inspection.category_result
-            else None
-        ),
-        "routing": inspection.routing.model_dump(mode="json"),
-        "idempotency_key": inspection.idempotency_key,
-        "category": inspection.category.value,
+# Deterministic outcomes that imply a genuine consequential action (else informational).
+_CONSEQUENTIAL_OUTCOMES = frozenset(
+    {
+        DecisionOutcome.eligible,
+        DecisionOutcome.requires_approval,
+        DecisionOutcome.requires_review,
     }
+)
+# Category → the consequential action a supervisor would approve (drives routing risk).
+_CATEGORY_ACTION: dict[TicketCategory, ActionType] = {
+    TicketCategory.refund_request: ActionType.refund,
+    TicketCategory.return_request: ActionType.return_rma,
+    TicketCategory.cancellation_request: ActionType.cancellation,
+    TicketCategory.damaged_item: ActionType.replacement,
+    TicketCategory.incorrect_item: ActionType.replacement,
+}
 
 
 async def evaluate_rules(
     ctx: WorkflowExecutionContext, state: SupportWorkflowState
 ) -> StepExecutionResult:
+    # Deterministic ownership/eligibility authority for this ticket.
     inspection = await inspect_ticket(ctx.session, state.ticket_reference, ctx.clock)
-    snapshot = _rule_snapshot(inspection)
-    routing = inspection.routing
-    rule_versions = {"routing": routing.rule_version or "rule-v1"}
+    category = inspection.category
+    category_result = inspection.category_result
+
+    # Route using the workflow's *live* model classification confidence (the ticket's
+    # stored confidence is None until this workflow classifies it). A consequential
+    # action only exists when the deterministic category result actually permits one;
+    # an ineligible/blocked outcome is informational and needs no approval.
+    consequential = (
+        category_result is not None
+        and category_result.outcome in _CONSEQUENTIAL_OUTCOMES
+    )
+    if consequential and category_result is not None:
+        action = _CATEGORY_ACTION.get(category, ActionType.information)
+        action_risk = category_result.risk_level
+    else:
+        action = ActionType.information
+        action_risk = RiskLevel.read_only
+    delivered_but_disputed = category_result is not None and category_result.has(
+        ReasonCode.DELIVERED_BUT_DISPUTED
+    )
+    routing = calculate_risk_and_route(
+        RoutingInput(
+            classification_confidence=state.confidence,
+            ticket_category=category,
+            ownership_blocked=inspection.ownership.outcome.value == "blocked",
+            injection_flag=state.injection_flag,
+            proposed_action=action,
+            action_risk=action_risk,
+            delivered_but_disputed=delivered_but_disputed,
+        )
+    )
+    snapshot = {
+        "ownership": inspection.ownership.model_dump(mode="json"),
+        "category_result": (
+            category_result.model_dump(mode="json") if category_result else None
+        ),
+        "routing": routing.model_dump(mode="json"),
+        "idempotency_key": inspection.idempotency_key,
+        "category": category.value,
+    }
     fragment: dict[str, object] = {
         "rule_results": snapshot,
-        "rule_versions": rule_versions,
+        "rule_versions": {"routing": routing.rule_version},
         "risk_level": routing.risk_level.value,
     }
     if inspection.ownership.outcome.value == "blocked":

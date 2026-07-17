@@ -72,7 +72,10 @@ _CATEGORY_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
         "delayed_delivery",
         ("delayed", "late", "still waiting", "hasn't shipped", "taking too long"),
     ),
-    ("order_tracking", ("track", "tracking", "where is my order", "order status")),
+    (
+        "order_tracking",
+        ("track", "tracking", "where is", "where's", "order status", "in transit"),
+    ),
     (
         "product_policy_question",
         ("policy", "how long do i have", "am i allowed", "do you accept", "warranty"),

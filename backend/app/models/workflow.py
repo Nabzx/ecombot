@@ -48,14 +48,18 @@ class WorkflowRun(UUIDPKMixin, TimestampMixin, Base):
         Index("ix_workflow_runs_status", "status"),
         Index("ix_workflow_runs_ticket", "ticket_id"),
         Index("ix_workflow_runs_created_at", "created_at"),
-        # At most one non-terminal run per ticket + workflow version.
+        # At most one non-terminal live run per ticket + workflow version. Replay runs
+        # are exempt (they intentionally re-run an existing ticket for comparison).
         Index(
             "uq_workflow_runs_active_ticket",
             "ticket_id",
             "workflow_name",
             "workflow_version",
             unique=True,
-            postgresql_where=text("status IN ('pending', 'running', 'paused')"),
+            postgresql_where=text(
+                "status IN ('pending', 'running', 'paused') "
+                "AND trigger_type <> 'replay'"
+            ),
         ),
     )
 
@@ -201,9 +205,7 @@ class WorkflowStep(UUIDPKMixin, Base):
     tool_call_ids: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, default=list
     )
-    citation_ids: Mapped[list[str]] = mapped_column(
-        JSONB, nullable=False, default=list
-    )
+    citation_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     metadata_json: Mapped[dict[str, object]] = mapped_column(
         JSONB, nullable=False, default=dict
     )
@@ -232,7 +234,7 @@ class WorkflowToolCall(UUIDPKMixin, Base):
         nullable=False,
     )
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    tool_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    tool_version: Mapped[str] = mapped_column(String(60), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     input_json: Mapped[dict[str, object]] = mapped_column(
         JSONB, nullable=False, default=dict
@@ -281,9 +283,7 @@ class ProposedAction(UUIDPKMixin, TimestampMixin, Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
     draft_response_subject: Mapped[str] = mapped_column(Text, nullable=False)
     draft_response_body: Mapped[str] = mapped_column(Text, nullable=False)
-    citation_ids: Mapped[list[str]] = mapped_column(
-        JSONB, nullable=False, default=list
-    )
+    citation_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     rule_result_json: Mapped[dict[str, object]] = mapped_column(
         JSONB, nullable=False, default=dict
     )
