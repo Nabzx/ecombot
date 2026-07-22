@@ -17,6 +17,8 @@ FRONTEND_DIR := frontend
         classify-ticket model-demo model-stats eval-model-layer \
         list-workflows workflow-start workflow-demo workflow-inspect \
         workflow-replay workflow-stats eval-workflows \
+        list-users approval-list approval-inspect approval-decisions \
+        approval-approve approval-reject approval-expire \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -134,6 +136,27 @@ workflow-replay: ## Replay a run: make workflow-replay RUN=<uuid>
 
 workflow-stats: ## Show workflow run statistics
 	$(COMPOSE) exec backend python -m app.workflows.cli stats
+
+list-users: ## List seeded users and their permissions
+	$(COMPOSE) exec backend python -m app.auth.cli list-users
+
+approval-list: ## Show the approval queue: make approval-list [STATUS=pending]
+	$(COMPOSE) exec backend python -m app.approvals.cli list $(if $(STATUS),--status $(STATUS),)
+
+approval-inspect: ## Inspect an approval: make approval-inspect APPROVAL=<uuid>
+	$(COMPOSE) exec backend python -m app.approvals.cli inspect $(APPROVAL)
+
+approval-decisions: ## Decision history: make approval-decisions APPROVAL=<uuid>
+	$(COMPOSE) exec backend python -m app.approvals.cli decisions $(APPROVAL)
+
+approval-approve: ## Approve: make approval-approve APPROVAL=<uuid> AS=super.priya@meridian.example
+	$(COMPOSE) exec backend python -m app.approvals.cli approve $(APPROVAL) --as $(AS)
+
+approval-reject: ## Reject: make approval-reject APPROVAL=<uuid> AS=<email> REASON="..."
+	$(COMPOSE) exec backend python -m app.approvals.cli reject $(APPROVAL) --as $(AS) --reason $(REASON)
+
+approval-expire: ## Expire approvals past their deadline
+	$(COMPOSE) exec backend python -m app.approvals.cli expire
 
 eval-workflows: ## Run the workflow evaluation (enforces hard gates)
 	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.workflows.evaluation

@@ -9,7 +9,16 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S5 — Workflow State Machine, Checkpointing & Replay.** On top of S0–S4,
+> **Current stage: S6 — Human Approval and Durable Action Execution (in progress).** The
+> **human-approval half is complete**: JWT authentication, RBAC, hashed approval snapshots,
+> Supervisor approve/reject/cancel/expiry, self-approval prevention, concurrent-decision
+> protection, authenticated approval APIs and a CLI. A granted approval moves the workflow
+> to `approved_pending_execution` — **durable execution (outbox worker, refund ledger,
+> executed actions) is not built yet**, so still nothing consequential runs. See
+> [docs/approval-system.md](docs/approval-system.md) and
+> [docs/authentication-rbac.md](docs/authentication-rbac.md).
+>
+> **S5 — Workflow State Machine, Checkpointing & Replay.** On top of S0–S4,
 > this stage composes the model tasks, deterministic tools, retrieval and rules into an
 > **explicit, durable, resumable and replayable** support-ticket workflow that safely reaches
 > a human-review, approval, escalation, needs-information or terminal boundary. It adds a
@@ -18,6 +27,24 @@ golden evaluation set.
 > **The engine orchestrates; it is not the authority** — deterministic rules decide
 > ownership/eligibility/risk/route, and **no consequential action is executed** (that is S6:
 > approvals, outbox, execution).
+
+## Human approval (S6)
+
+Consequential actions stop at `awaiting_approval` and wait for a named Supervisor. Nothing
+executes: a granted approval reaches `approved_pending_execution` and queues no work yet.
+
+- **Authentication & RBAC** (`app/auth/`): JWT access/refresh tokens with type checking,
+  bcrypt passwords, and permission-based authorisation. See
+  [docs/authentication-rbac.md](docs/authentication-rbac.md).
+- **Approval snapshots** (`app/approvals/snapshot.py`): the action, amount, deterministic
+  limit, rule outcome and citations frozen into canonical JSON and SHA-256 hashed, re-verified
+  before every decision so a Supervisor can only approve exactly what they were shown.
+- **Decisions** (`app/approvals/service.py`): approve / reject / cancel / expire as
+  append-only rows, with row-locked exactly-one-winner concurrency, derived amount ceilings,
+  and self-approval refused independently of role. See
+  [docs/approval-system.md](docs/approval-system.md).
+- **APIs & CLI** (`app/api/routes/approvals.py`, `app/approvals/cli.py`): an authenticated,
+  PII-safe approval queue with `Idempotency-Key` support, and `make approval-*` commands.
 
 ## Workflow engine (S5)
 
@@ -338,20 +365,21 @@ the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector
 applies migrations, seeds the synthetic data, runs the integrity check, and runs the
 full pytest suite. Nothing in CI requires paid APIs.
 
-## Current limitations (S5)
+## Current limitations (S6, in progress)
 
-- The workflow **orchestrates and proposes**; it does not approve, execute, move money,
-  dispatch replacements, send customer emails or update ticket status. It stops at
-  `awaiting_agent` / `awaiting_approval` / `needs_information` / `escalated` or a terminal
-  state. **No approval decision, outbox or consequential execution exists** (that is S6), and
-  the frontend is still the S0 status page.
+- **Nothing consequential is executed yet.** A Supervisor approval is recorded and the run
+  reaches `approved_pending_execution`, but no outbox job is created, no refund ledger entry
+  is written and no executed-action row exists. Money never moves. The remaining S6 work
+  (outbox worker, refund/cancellation execution, dead-letter handling) is the next
+  increment; the frontend is still the S0 status page.
 - The default provider is a deterministic **mock**, not a language model: it exercises the
   engine (routing, checkpoints, safety, recovery) rather than demonstrating language quality.
   Ollama/hosted are optional and never required for tests or CI.
-- Approval / outbox / audit **tables are deferred** to S6+. `workflow_runs` links to model
-  calls; `proposed_actions` are stored but never `approved`/`executed`.
-- `JWT_SECRET` in `.env.example` is a labelled development placeholder; authentication
-  is not wired up yet.
+- Outbox, executed-action and refund-ledger **tables exist but are never written to** yet.
+- New runs default to `support-ticket-v2` (approval-capable). `support-ticket-v1` is frozen
+  and remains replayable.
+- `JWT_SECRET` in `.env.example` is a labelled development placeholder; configuration
+  validation refuses to start in production while it is still in use.
 - The synthetic dataset is anchored to a fixed reference date (2026-07-16), so
   "days since delivery" are relative to that date rather than today.
 - Two moderate `npm audit` advisories remain in a `postcss` copy bundled **inside**
@@ -362,7 +390,8 @@ full pytest suite. Nothing in CI requires paid APIs.
 
 S0 Foundations → S1 Domain & Synthetic Data → S2 Deterministic Tools & Business Rules →
 S3 Policy Retrieval & Evidence Grounding → S4 Provider Abstraction & Prompt System →
-**S5 Workflow State Machine & Checkpointing (this stage)** → S6 Human Approval & Durable
-Action Execution → S7 Observability & audit → S8 Evaluation → S9 Dashboard → S10 Hardening.
+S5 Workflow State Machine & Checkpointing → **S6 Human Approval & Durable Action Execution
+(this stage — approvals done, execution pending)** → S7 Observability & audit →
+S8 Evaluation → S9 Dashboard → S10 Hardening.
 
-**Next up: S6 — Human Approval and Durable Action Execution.**
+**Next up: the rest of S6 — the outbox worker and durable action execution.**
