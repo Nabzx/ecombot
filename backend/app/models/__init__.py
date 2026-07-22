@@ -22,6 +22,7 @@ from app.models.enums import (
     UserRole,
 )
 from app.models.execution import ExecutedAction, RefundLedgerEntry
+from app.models.idempotency import IdempotencyRecord
 from app.models.model_call import ModelCall
 from app.models.order import Order, OrderItem
 from app.models.outbox import OutboxJob
@@ -45,6 +46,7 @@ __all__ = [
     "Customer",
     "CustomerTier",
     "ExecutedAction",
+    "IdempotencyRecord",
     "MessageSender",
     "ModelCall",
     "Order",
