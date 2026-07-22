@@ -20,7 +20,6 @@ from app.workflows.context import WorkflowExecutionContext, WorkflowLimits
 from app.workflows.definition import (
     STATE_SCHEMA_VERSION,
     WORKFLOW_NAME,
-    WORKFLOW_VERSION,
 )
 from app.workflows.enums import (
     ReplayMode,
@@ -30,6 +29,7 @@ from app.workflows.enums import (
     WorkflowStatus,
     is_terminal,
 )
+from app.workflows.registry import DEFAULT_WORKFLOW_VERSION
 from app.workflows.repository import WorkflowRepository
 from app.workflows.results import (
     WorkflowDiff,
@@ -50,6 +50,9 @@ class StartWorkflowRequest:
     correlation_id: str | None = None
     process_immediately: bool = True
     mock_scenario: str = ""
+    # New runs default to support-ticket-v2 (approval/execution capable); v1 can still
+    # be requested explicitly and remains replayable.
+    workflow_version: str = DEFAULT_WORKFLOW_VERSION
 
 
 @dataclass
@@ -107,7 +110,7 @@ class SupportWorkflowService:
                 raise LookupError("ticket not found")
 
             existing = await repo.get_active_for_ticket(
-                ticket.id, WORKFLOW_NAME, WORKFLOW_VERSION
+                ticket.id, WORKFLOW_NAME, request.workflow_version
             )
             if existing is not None:
                 return await self._summary(session, existing.id)
@@ -115,7 +118,7 @@ class SupportWorkflowService:
             correlation_id = request.correlation_id or f"wf-{uuid.uuid4().hex[:16]}"
             run = await repo.create_run(
                 workflow_name=WORKFLOW_NAME,
-                workflow_version=WORKFLOW_VERSION,
+                workflow_version=request.workflow_version,
                 state_schema_version=STATE_SCHEMA_VERSION,
                 ticket_id=ticket.id,
                 correlation_id=correlation_id,
@@ -128,7 +131,7 @@ class SupportWorkflowService:
             state = SupportWorkflowState(
                 workflow_run_id=run.id,
                 workflow_name=WORKFLOW_NAME,
-                workflow_version=WORKFLOW_VERSION,
+                workflow_version=request.workflow_version,
                 ticket_id=ticket.id,
                 ticket_reference=ticket.ticket_reference,
                 correlation_id=correlation_id,

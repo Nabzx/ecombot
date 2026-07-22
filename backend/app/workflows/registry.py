@@ -37,6 +37,9 @@ _V2_EXTRA_TRANSITIONS: dict[WorkflowState, TransitionSpec] = {
                 _S.APPROVED_PENDING_EXECUTION,
                 _S.APPROVAL_REJECTED,
                 _S.APPROVAL_EXPIRED,
+                # A withdrawn (agent-cancelled) proposal returns to a human agent
+                # rather than terminating the run.
+                _S.AWAITING_AGENT,
             }
         ),
         handler="__human__",
