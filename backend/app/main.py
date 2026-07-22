@@ -74,9 +74,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(api_router, prefix=settings.api_prefix)
 
     # Authenticated business endpoints (own /api/... prefixes).
+    from app.api.routes import approvals as approval_routes
     from app.api.routes import auth as auth_routes
 
     app.include_router(auth_routes.router)
+    app.include_router(approval_routes.router)
 
     # Development-only inspection endpoints.
     if settings.environment in ("development", "test"):

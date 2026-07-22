@@ -327,7 +327,7 @@ class ApprovalService:
             actor=actor,
         )
         # No outbox job is created in this increment.
-        return self._result(approval, created=False)
+        return self._result(approval, created=False, state=run.current_state)
 
     async def reject(
         self,
@@ -376,7 +376,7 @@ class ApprovalService:
             approval=approval,
             actor=actor,
         )
-        return self._result(approval, created=False)
+        return self._result(approval, created=False, state=run.current_state)
 
     async def cancel(
         self,
@@ -422,7 +422,7 @@ class ApprovalService:
             approval=approval,
             actor=actor,
         )
-        return self._result(approval, created=False)
+        return self._result(approval, created=False, state=run.current_state)
 
     # -- expiry ----------------------------------------------------------------------
     async def expire_due_requests(self, *, limit: int = 50) -> ExpirySweepResult:
@@ -755,12 +755,17 @@ class ApprovalService:
         )
 
     @staticmethod
-    def _result(approval: ApprovalRequest, *, created: bool) -> ApprovalResult:
+    def _result(
+        approval: ApprovalRequest,
+        *,
+        created: bool,
+        state: WorkflowState = WorkflowState.AWAITING_APPROVAL,
+    ) -> ApprovalResult:
         return ApprovalResult(
             approval_id=approval.id,
             status=approval.status,
             workflow_run_id=approval.workflow_run_id,
-            workflow_state=WorkflowState.AWAITING_APPROVAL,
+            workflow_state=state,
             snapshot_hash=approval.evidence_snapshot_hash,
             requested_amount_pence=approval.requested_amount_pence,
             maximum_allowed_amount_pence=approval.maximum_allowed_amount_pence,
