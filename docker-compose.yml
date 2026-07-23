@@ -59,6 +59,28 @@ services:
       retries: 5
       start_period: 25s
 
+  worker:
+    # The durable outbox worker. Reuses the backend image; no HTTP server, no port.
+    build: ./backend
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      # Wait for the backend to have applied migrations so the worker never races Alembic.
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data:ro
+      - ./evaluations:/app/evaluations
+    environment:
+      # A distinct worker identity so its logs are easy to attribute.
+      WORKER_ID: docker-outbox-worker-1
+    command: ["python", "-m", "app.outbox.worker"]
+    # Graceful shutdown: the worker traps SIGTERM and drains the current tick.
+    stop_grace_period: 15s
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     environment:
