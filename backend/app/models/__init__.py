@@ -26,6 +26,7 @@ from app.models.idempotency import IdempotencyRecord
 from app.models.model_call import ModelCall
 from app.models.order import Order, OrderItem
 from app.models.outbox import OutboxJob
+from app.models.outbox_attempt import OutboxAttempt
 from app.models.policy import Policy, PolicyChunk, PolicyVersion
 from app.models.product import Product
 from app.models.prompt_version import PromptVersion
@@ -52,6 +53,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderStatus",
+    "OutboxAttempt",
     "OutboxJob",
     "Policy",
     "PolicyChunk",
