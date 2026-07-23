@@ -7,8 +7,8 @@ transition, and writes a workflow step plus checkpoint.
 
 A successful approval for an automatically executable action atomically records the
 decision, moves the workflow to ``approved_pending_execution`` and enqueues exactly one
-durable outbox job (approval status ``execution_pending``). An approved action that is not
-auto-executable is routed to ``manual_action_required`` with no job. Execution itself is
+durable outbox job (approval status ``execution_pending``). An approved action that is
+not auto-executable is routed to ``manual_action_required`` with no job. Execution is
 performed by the outbox worker, never here.
 """
 
@@ -728,8 +728,9 @@ class ApprovalService:
                     "approval_required": True,
                 }
             )
+            # The snapshot stays a valid, hash-matching workflow state; the decision
+            # metadata lives on the workflow step's summary (never in the checkpoint).
             snapshot_json, digest = build_snapshot(updated)
-            snapshot_json["approval_metadata"] = metadata
             new_checkpoint = await self._workflows.append_checkpoint(
                 run_id=run.id,
                 step_index=new_index,

@@ -1,9 +1,9 @@
 """PostgreSQL-backed approval-service tests (S6).
 
 Drives the real ``DEMO-REFUND-APPROVAL-001`` workflow to ``awaiting_approval``, then
-exercises creation, editing, the four decision paths and every safety guard. A successful
-approval atomically enqueues exactly one durable outbox job; execution itself is the
-worker's job and is covered separately.
+exercises creation, editing, the four decision paths and every safety guard. A
+successful approval atomically enqueues exactly one durable outbox job; execution itself
+is the worker's job and is covered separately.
 """
 
 from __future__ import annotations
@@ -316,15 +316,16 @@ async def test_approve_writes_step_and_checkpoint(
 
         repo = WorkflowRepository(session)
         steps = await repo.list_steps(run_id)
-        assert steps[-1].step_name == "approval_granted"
-        assert steps[-1].destination_state == WorkflowState.APPROVED_PENDING_EXECUTION
+        granted = next(s for s in steps if s.step_name == "approval_granted")
+        assert granted.destination_state == WorkflowState.APPROVED_PENDING_EXECUTION
+        # The decision metadata lives on the step summary; the checkpoint stays a
+        # valid, hash-matching workflow state.
+        metadata = granted.output_summary_json
+        assert metadata["approval_request_id"] == str(approval_id)
+        assert metadata["actor_user_id"] == str(supervisor.user_id)
         checkpoint = await repo.get_latest_checkpoint(run_id)
         assert checkpoint is not None
         assert checkpoint.state == WorkflowState.APPROVED_PENDING_EXECUTION
-        metadata = checkpoint.snapshot_json["approval_metadata"]
-        assert isinstance(metadata, dict)
-        assert metadata["approval_request_id"] == str(approval_id)
-        assert metadata["actor_user_id"] == str(supervisor.user_id)
 
 
 async def test_self_approval_is_forbidden(

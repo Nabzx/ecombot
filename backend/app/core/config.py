@@ -85,7 +85,11 @@ class Settings(BaseSettings):
     outbox_lease_seconds: int = 60
     outbox_max_attempts: int = 5
     outbox_retry_base_seconds: float = 2.0
+    outbox_retry_max_seconds: float = 300.0
+    outbox_retry_jitter: float = 0.2
     worker_shutdown_timeout_seconds: float = 10.0
+    worker_heartbeat_seconds: float = 15.0
+    worker_stale_heartbeat_seconds: float = 90.0
     # Deterministic failure injection for tests/eval only (empty = disabled).
     outbox_failure_injection: str = ""
 
