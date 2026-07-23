@@ -25,6 +25,28 @@ WORKFLOW_V1_VERSION = "1.0.0"
 WORKFLOW_V2_VERSION = "2.0.0"
 DEFAULT_WORKFLOW_VERSION = WORKFLOW_V2_VERSION
 
+# Canonical workflow names. Historically both v1 and v2 shared WORKFLOW_NAME
+# ("support-ticket-v1"), so early v2 runs were persisted as support-ticket-v1@2.0.0.
+# New v2 runs use the canonical name below; legacy rows stay readable via the resolver.
+WORKFLOW_V1_NAME = "support-ticket-v1"
+WORKFLOW_V2_NAME = "support-ticket-v2"
+LEGACY_V2_NAME = WORKFLOW_NAME  # "support-ticket-v1" — how early v2 runs were stored
+
+
+def canonical_workflow_name(version: str) -> str:
+    """The canonical workflow name for a semantic version."""
+    return WORKFLOW_V2_NAME if version == WORKFLOW_V2_VERSION else WORKFLOW_V1_NAME
+
+
+def display_identity(name: str, version: str) -> str:
+    """A clear, human-readable ``name @ version`` for CLI/API, legacy-aware.
+
+    A legacy v2 row stored as ``support-ticket-v1@2.0.0`` is shown with its canonical
+    name so the identity always reads correctly, without rewriting the stored row.
+    """
+    return f"{canonical_workflow_name(version)} @ {version}"
+
+
 _S = WorkflowState
 
 # v2 = every v1 edge plus the approval/execution continuation. These edges are validated
@@ -92,26 +114,30 @@ class WorkflowDefinition:
 
 
 _V1 = WorkflowDefinition(
-    name=WORKFLOW_NAME, version=WORKFLOW_V1_VERSION, transitions=dict(V1_TRANSITIONS)
+    name=WORKFLOW_V1_NAME, version=WORKFLOW_V1_VERSION, transitions=dict(V1_TRANSITIONS)
 )
 _V2 = WorkflowDefinition(
-    name=WORKFLOW_NAME,
+    name=WORKFLOW_V2_NAME,
     version=WORKFLOW_V2_VERSION,
     transitions={**V1_TRANSITIONS, **_V2_EXTRA_TRANSITIONS},
 )
 
-_REGISTRY: dict[tuple[str, str], WorkflowDefinition] = {
-    (_V1.name, _V1.version): _V1,
-    (_V2.name, _V2.version): _V2,
+# A definition is keyed by version (the transition table is a function of the version).
+# Both the canonical and the legacy v2 name resolve to the same definition, so early
+# support-ticket-v1@2.0.0 runs stay fully inspectable and replayable.
+_BY_VERSION: dict[str, WorkflowDefinition] = {
+    _V1.version: _V1,
+    _V2.version: _V2,
 }
 
 
-def get_definition(version: str, name: str = WORKFLOW_NAME) -> WorkflowDefinition:
+def get_definition(version: str, name: str = WORKFLOW_V1_NAME) -> WorkflowDefinition:
+    """Resolve a workflow definition by version (name is advisory, legacy-tolerant)."""
     try:
-        return _REGISTRY[(name, version)]
+        return _BY_VERSION[version]
     except KeyError as exc:
         raise KeyError(f"unknown workflow {name}@{version}") from exc
 
 
 def registered_versions() -> list[str]:
-    return sorted(version for _, version in _REGISTRY)
+    return sorted(_BY_VERSION)

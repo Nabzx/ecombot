@@ -19,7 +19,6 @@ from app.workflows.checkpointing import build_snapshot
 from app.workflows.context import WorkflowExecutionContext, WorkflowLimits
 from app.workflows.definition import (
     STATE_SCHEMA_VERSION,
-    WORKFLOW_NAME,
 )
 from app.workflows.enums import (
     ReplayMode,
@@ -29,7 +28,10 @@ from app.workflows.enums import (
     WorkflowStatus,
     is_terminal,
 )
-from app.workflows.registry import DEFAULT_WORKFLOW_VERSION
+from app.workflows.registry import (
+    DEFAULT_WORKFLOW_VERSION,
+    canonical_workflow_name,
+)
 from app.workflows.repository import WorkflowRepository
 from app.workflows.results import (
     WorkflowDiff,
@@ -109,15 +111,17 @@ class SupportWorkflowService:
             if ticket is None:
                 raise LookupError("ticket not found")
 
+            # New runs use the canonical name for their version (v2→support-ticket-v2).
+            workflow_name = canonical_workflow_name(request.workflow_version)
             existing = await repo.get_active_for_ticket(
-                ticket.id, WORKFLOW_NAME, request.workflow_version
+                ticket.id, workflow_name, request.workflow_version
             )
             if existing is not None:
                 return await self._summary(session, existing.id)
 
             correlation_id = request.correlation_id or f"wf-{uuid.uuid4().hex[:16]}"
             run = await repo.create_run(
-                workflow_name=WORKFLOW_NAME,
+                workflow_name=workflow_name,
                 workflow_version=request.workflow_version,
                 state_schema_version=STATE_SCHEMA_VERSION,
                 ticket_id=ticket.id,
@@ -130,7 +134,7 @@ class SupportWorkflowService:
             )
             state = SupportWorkflowState(
                 workflow_run_id=run.id,
-                workflow_name=WORKFLOW_NAME,
+                workflow_name=workflow_name,
                 workflow_version=request.workflow_version,
                 ticket_id=ticket.id,
                 ticket_reference=ticket.ticket_reference,

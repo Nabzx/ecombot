@@ -177,7 +177,13 @@ class WorkflowFailureCode(StrEnum):
 
 
 class ProposedActionStatus(StrEnum):
-    """Lifecycle of a proposed action prior to any S6 approval/execution."""
+    """Lifecycle of a proposed action, including S6 approval and execution.
+
+    Convention: a Supervisor *rejection* moves the proposal to ``REJECTED``;
+    ``SUPERSEDED`` is reserved for a proposal replaced by a newer one on the same run;
+    ``CANCELLED`` is a withdrawn (agent-cancelled) request. Successful execution reaches
+    ``COMPLETED``; a failed technical execution never marks the proposal completed.
+    """
 
     DRAFT = "draft"
     READY_FOR_AGENT = "ready_for_agent"
@@ -185,6 +191,66 @@ class ProposedActionStatus(StrEnum):
     BLOCKED = "blocked"
     SUPERSEDED = "superseded"
     CANCELLED = "cancelled"
+    # --- S6 approval/execution ---
+    APPROVED_PENDING_EXECUTION = "approved_pending_execution"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+
+
+# Legal proposed-action transitions. Anything not listed is rejected.
+PROPOSED_ACTION_TRANSITIONS: dict[
+    ProposedActionStatus, frozenset[ProposedActionStatus]
+] = {
+    ProposedActionStatus.DRAFT: frozenset(
+        {
+            ProposedActionStatus.READY_FOR_AGENT,
+            ProposedActionStatus.AWAITING_APPROVAL,
+            ProposedActionStatus.BLOCKED,
+            ProposedActionStatus.SUPERSEDED,
+            ProposedActionStatus.CANCELLED,
+        }
+    ),
+    ProposedActionStatus.READY_FOR_AGENT: frozenset(
+        {
+            ProposedActionStatus.AWAITING_APPROVAL,
+            ProposedActionStatus.SUPERSEDED,
+            ProposedActionStatus.CANCELLED,
+        }
+    ),
+    ProposedActionStatus.AWAITING_APPROVAL: frozenset(
+        {
+            ProposedActionStatus.APPROVED_PENDING_EXECUTION,
+            ProposedActionStatus.REJECTED,
+            ProposedActionStatus.SUPERSEDED,
+            ProposedActionStatus.CANCELLED,
+        }
+    ),
+    ProposedActionStatus.APPROVED_PENDING_EXECUTION: frozenset(
+        {
+            ProposedActionStatus.COMPLETED,
+            # A failed/dead-lettered execution leaves the proposal awaiting manual
+            # handling; a Supervisor retry returns it here.
+            ProposedActionStatus.APPROVED_PENDING_EXECUTION,
+        }
+    ),
+}
+
+# Terminal proposed-action statuses.
+TERMINAL_PROPOSED_ACTION_STATUSES: frozenset[ProposedActionStatus] = frozenset(
+    {
+        ProposedActionStatus.BLOCKED,
+        ProposedActionStatus.SUPERSEDED,
+        ProposedActionStatus.CANCELLED,
+        ProposedActionStatus.COMPLETED,
+        ProposedActionStatus.REJECTED,
+    }
+)
+
+
+def is_valid_proposed_action_transition(
+    source: ProposedActionStatus, destination: ProposedActionStatus
+) -> bool:
+    return destination in PROPOSED_ACTION_TRANSITIONS.get(source, frozenset())
 
 
 class ReplayMode(StrEnum):

@@ -47,7 +47,12 @@ from app.repositories.order import OrderRepository
 from app.rules.clock import Clock, SystemClock
 from app.workflows.checkpointing import build_snapshot, restore_state
 from app.workflows.definition import STATE_SCHEMA_VERSION
-from app.workflows.enums import ProposedActionStatus, WorkflowState, is_terminal
+from app.workflows.enums import (
+    ProposedActionStatus,
+    WorkflowState,
+    is_terminal,
+    is_valid_proposed_action_transition,
+)
 from app.workflows.registry import WORKFLOW_V2_VERSION, get_definition
 from app.workflows.repository import WorkflowRepository
 
@@ -319,6 +324,9 @@ class ApprovalService:
             decided_amount_pence=amount,
             metadata={"snapshot_hash": approval.evidence_snapshot_hash},
         )
+        await self._set_proposal_status(
+            approval, ProposedActionStatus.APPROVED_PENDING_EXECUTION
+        )
         await self._apply_workflow_transition(
             run,
             destination=WorkflowState.APPROVED_PENDING_EXECUTION,
@@ -326,7 +334,7 @@ class ApprovalService:
             approval=approval,
             actor=actor,
         )
-        # No outbox job is created in this increment.
+        # Outbox job creation is wired in the execution increment.
         return self._result(approval, created=False, state=run.current_state)
 
     async def reject(
@@ -368,7 +376,7 @@ class ApprovalService:
             reason=request.reason,
             requested_amount_pence=approval.requested_amount_pence,
         )
-        await self._supersede_proposal(approval, ProposedActionStatus.SUPERSEDED)
+        await self._set_proposal_status(approval, ProposedActionStatus.REJECTED)
         await self._apply_workflow_transition(
             run,
             destination=WorkflowState.APPROVAL_REJECTED,
@@ -412,7 +420,7 @@ class ApprovalService:
             now=now,
             reason=request.reason,
         )
-        await self._supersede_proposal(approval, ProposedActionStatus.CANCELLED)
+        await self._set_proposal_status(approval, ProposedActionStatus.CANCELLED)
         # Cancelling the approval returns the ticket to a human agent rather than
         # terminating the workflow: the proposal is withdrawn, not refused.
         await self._apply_workflow_transition(
@@ -593,13 +601,22 @@ class ApprovalService:
             )
         return run
 
-    async def _supersede_proposal(
+    async def _set_proposal_status(
         self, approval: ApprovalRequest, status: ProposedActionStatus
     ) -> None:
+        """Move the proposal to a new status, rejecting an illegal transition."""
         proposal = await self._session.get(ProposedAction, approval.proposed_action_id)
-        if proposal is not None:
-            proposal.status = status
-            await self._session.flush()
+        if proposal is None:
+            return
+        if proposal.status != status and not is_valid_proposed_action_transition(
+            proposal.status, status
+        ):
+            raise ApprovalError(
+                ApprovalErrorCode.WORKFLOW_STATE_CONFLICT,
+                f"illegal proposal transition {proposal.status.value}->{status.value}",
+            )
+        proposal.status = status
+        await self._session.flush()
 
     async def _apply_workflow_transition(
         self,

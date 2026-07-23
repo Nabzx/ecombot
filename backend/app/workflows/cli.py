@@ -22,6 +22,7 @@ from app.workflows.definition import (
     WORKFLOW_NAME,
     WORKFLOW_VERSION,
 )
+from app.workflows.registry import display_identity
 from app.workflows.repository import WorkflowRepository
 from app.workflows.results import WorkflowRunResult
 from app.workflows.service import (
@@ -49,7 +50,10 @@ def _service() -> SupportWorkflowService:
 def _print_result(result: WorkflowRunResult) -> None:
     print(f"run_id            {result.run_id}")
     print(f"ticket            {result.ticket_reference} ({result.ticket_id})")
-    print(f"workflow          {result.workflow_name}@{result.workflow_version}")
+    print(
+        "workflow          "
+        f"{display_identity(result.workflow_name, result.workflow_version)}"
+    )
     print(f"state / status    {result.state.value} / {result.status.value}")
     print(f"steps / cps       {result.step_count} / {result.checkpoint_count}")
     print(f"classification    {result.classification}")
@@ -78,7 +82,7 @@ async def _ticket_ref_for_fixture(fixture: str) -> str:
 
 # --- commands ----------------------------------------------------------------------
 def cmd_list_definitions(_: argparse.Namespace) -> int:
-    print(f"workflow          {WORKFLOW_NAME}@{WORKFLOW_VERSION}")
+    print(f"workflow          {display_identity(WORKFLOW_NAME, WORKFLOW_VERSION)}")
     print(f"active steps      {len(STATE_HANDLERS)}")
     for state, spec in TRANSITIONS.items():
         dests = ", ".join(sorted(d.value for d in spec.destinations))

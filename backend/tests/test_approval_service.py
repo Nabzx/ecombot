@@ -377,7 +377,7 @@ async def test_reject_ends_the_run(maker: async_sessionmaker[AsyncSession]) -> N
         assert run.current_state == WorkflowState.APPROVAL_REJECTED
         proposal = await WorkflowRepository(session).get_current_proposal(run_id)
         if proposal is not None:
-            assert proposal.status == ProposedActionStatus.SUPERSEDED
+            assert proposal.status == ProposedActionStatus.REJECTED
 
 
 async def test_reject_requires_a_reason(
