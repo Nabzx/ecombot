@@ -18,7 +18,9 @@ FRONTEND_DIR := frontend
         list-workflows workflow-start workflow-demo workflow-inspect \
         workflow-replay workflow-stats eval-workflows \
         list-users approval-list approval-inspect approval-decisions \
-        approval-approve approval-reject approval-expire \
+        approval-approve approval-reject approval-expire approval-retry \
+        outbox-list outbox-stats process-outbox release-outbox-leases \
+        action-list refund-ledger \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -157,6 +159,27 @@ approval-reject: ## Reject: make approval-reject APPROVAL=<uuid> AS=<email> REAS
 
 approval-expire: ## Expire approvals past their deadline
 	$(COMPOSE) exec backend python -m app.approvals.cli expire
+
+approval-retry: ## Authorise retry: make approval-retry APPROVAL=<uuid> AS=<supervisor-email>
+	$(COMPOSE) exec backend python -m app.approvals.cli retry $(APPROVAL) --user $(AS)
+
+outbox-list: ## Show the outbox queue
+	$(COMPOSE) exec backend python -m app.outbox.cli list $(if $(STATUS),--status $(STATUS),)
+
+outbox-stats: ## Show outbox counts by status
+	$(COMPOSE) exec backend python -m app.outbox.cli stats
+
+process-outbox: ## Process one due outbox job through the worker
+	$(COMPOSE) exec backend python -m app.outbox.cli process-one
+
+release-outbox-leases: ## Reclaim outbox jobs with expired leases
+	$(COMPOSE) exec backend python -m app.outbox.cli release-expired-leases
+
+action-list: ## List executed (simulated) actions
+	$(COMPOSE) exec backend python -m app.actions.cli list
+
+refund-ledger: ## Show an order's refund ledger: make refund-ledger ORDER=MER-2026-000001
+	$(COMPOSE) exec backend python -m app.actions.cli refund-ledger $(ORDER)
 
 eval-workflows: ## Run the workflow evaluation (enforces hard gates)
 	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.workflows.evaluation
