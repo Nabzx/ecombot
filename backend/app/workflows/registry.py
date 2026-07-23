@@ -62,6 +62,9 @@ _V2_EXTRA_TRANSITIONS: dict[WorkflowState, TransitionSpec] = {
                 # A withdrawn (agent-cancelled) proposal returns to a human agent
                 # rather than terminating the run.
                 _S.AWAITING_AGENT,
+                # An approved action that is not automatically executable (e.g. a
+                # replacement) is routed to a human for manual handling.
+                _S.MANUAL_ACTION_REQUIRED,
             }
         ),
         handler="__human__",

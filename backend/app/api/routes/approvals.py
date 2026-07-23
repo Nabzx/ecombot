@@ -196,12 +196,16 @@ async def _load(session: AsyncSession, approval_id: uuid.UUID) -> ApprovalReques
 
 
 async def _outcome(
-    session: AsyncSession, approval_id: uuid.UUID, state: str
+    session: AsyncSession,
+    approval_id: uuid.UUID,
+    state: str,
+    *,
+    outbox_job_created: bool = False,
 ) -> DecisionOutcome:
     return DecisionOutcome(
         approval=ApprovalSummary.of(await _load(session, approval_id)),
         workflow_state=state,
-        outbox_job_created=False,
+        outbox_job_created=outbox_job_created,
     )
 
 
@@ -412,7 +416,12 @@ async def approve(
             now=seed_reference_clock().now(),
         )
     await session.commit()
-    return await _outcome(session, approval_id, result.workflow_state.value)
+    return await _outcome(
+        session,
+        approval_id,
+        result.workflow_state.value,
+        outbox_job_created=result.outbox_job_created,
+    )
 
 
 @router.post("/approvals/{approval_id}/reject")

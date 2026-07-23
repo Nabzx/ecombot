@@ -5,9 +5,11 @@ strict limits, and records approve / reject / cancel / expire decisions. Every d
 is an immutable row, moves the ``support-ticket-v2`` workflow through a validated
 transition, and writes a workflow step plus checkpoint.
 
-**Boundary for this increment:** a successful approval reaches
-``approved_pending_execution`` and creates **no outbox job**; nothing is executed. The
-outbox/execution wiring is added in the next increment, extending this transaction.
+A successful approval for an automatically executable action atomically records the
+decision, moves the workflow to ``approved_pending_execution`` and enqueues exactly one
+durable outbox job (approval status ``execution_pending``). An approved action that is not
+auto-executable is routed to ``manual_action_required`` with no job. Execution itself is
+performed by the outbox worker, never here.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.actions.enums import PROPOSED_TO_EXECUTION, ExecutionActionType
 from app.approvals.enums import (
     ApprovalDecisionType,
     ApprovalStatus,
@@ -41,8 +44,12 @@ from app.auth.models import AuthenticatedUser
 from app.core.config import Settings, get_settings
 from app.models.approval import ApprovalRequest
 from app.models.enums import UserRole
+from app.models.outbox import OutboxJob
 from app.models.ticket import Ticket
 from app.models.workflow import ProposedAction, WorkflowRun
+from app.outbox.enums import OutboxStatus
+from app.outbox.payload import OutboxJobData
+from app.outbox.repository import OutboxRepository
 from app.repositories.order import OrderRepository
 from app.rules.clock import Clock, SystemClock
 from app.workflows.checkpointing import build_snapshot, restore_state
@@ -104,7 +111,9 @@ class ApprovalResult:
     maximum_allowed_amount_pence: int | None = None
     approved_amount_pence: int | None = None
     created: bool = True
-    outbox_job_created: bool = False  # always False in this increment
+    outbox_job_created: bool = False
+    outbox_job_id: uuid.UUID | None = None
+    manual_action_required: bool = False
 
 
 @dataclass
@@ -118,7 +127,7 @@ class ExpirySweepResult:
 
 
 class ApprovalService:
-    """Approval creation, editing, decisions and expiry. Creates no outbox job yet."""
+    """Approval creation, editing, decisions, expiry and atomic outbox enqueue."""
 
     def __init__(
         self,
@@ -311,7 +320,7 @@ class ApprovalService:
         self._transition(approval, ApprovalStatus.APPROVED)
         approval.decided_at = now
         await self._rehash(approval)
-        await self._decisions.append(
+        decision = await self._decisions.append(
             approval_request_id=approval.id,
             decision=ApprovalDecisionType.APPROVE,
             actor_user_id=actor.user_id,
@@ -334,8 +343,44 @@ class ApprovalService:
             approval=approval,
             actor=actor,
         )
-        # Outbox job creation is wired in the execution increment.
-        return self._result(approval, created=False, state=run.current_state)
+
+        execution_action = PROPOSED_TO_EXECUTION.get(approval.action_type)
+        if execution_action is None:
+            # Not automatically executable (e.g. replacement / return authorisation):
+            # record the approval but route to a human. No outbox job is created.
+            await self._apply_workflow_transition(
+                run,
+                destination=WorkflowState.MANUAL_ACTION_REQUIRED,
+                step_name="manual_action_required",
+                approval=approval,
+                actor=actor,
+                reason="action is not automatically executable",
+            )
+            return self._result(
+                approval,
+                created=False,
+                state=run.current_state,
+                manual_action_required=True,
+            )
+
+        # Atomically enqueue exactly one durable outbox job and move the approval to
+        # execution_pending. The unique idempotency key + one-job-per-approval index
+        # make a duplicate job impossible even under a concurrent decision.
+        job = await self._create_outbox_job(
+            approval=approval,
+            decision_id=decision.id,
+            run=run,
+            execution_action=execution_action,
+            now=now,
+        )
+        self._transition(approval, ApprovalStatus.EXECUTION_PENDING)
+        return self._result(
+            approval,
+            created=False,
+            state=run.current_state,
+            outbox_job_created=True,
+            outbox_job_id=job.id,
+        )
 
     async def reject(
         self,
@@ -626,6 +671,7 @@ class ApprovalService:
         step_name: str,
         approval: ApprovalRequest,
         actor: AuthenticatedUser | None,
+        reason: str | None = None,
     ) -> None:
         """Move a v2 run through a human-decision transition with step + checkpoint."""
         definition = get_definition(run.workflow_version)
@@ -660,6 +706,8 @@ class ApprovalService:
             "actor_user_id": str(actor.user_id) if actor else None,
             "actor_role": actor.role.value if actor else SYSTEM_ACTOR_ROLE,
         }
+        if reason is not None:
+            metadata["reason"] = reason
         await self._workflows.complete_step(
             step,
             destination_state=destination,
@@ -698,6 +746,62 @@ class ApprovalService:
             await self._workflows.update_state(
                 run, state=destination, step_index=new_index, current_step=step_name
             )
+
+    async def _create_outbox_job(
+        self,
+        *,
+        approval: ApprovalRequest,
+        decision_id: uuid.UUID,
+        run: WorkflowRun,
+        execution_action: ExecutionActionType,
+        now: datetime,
+    ) -> OutboxJob:
+        """Build and persist exactly one durable outbox job for an approved action."""
+        snapshot = ApprovalSnapshot.model_validate(approval.evidence_snapshot_json)
+        job_id = uuid.uuid4()
+        payload = OutboxJobData(
+            outbox_job_id=job_id,
+            approval_request_id=approval.id,
+            approval_decision_id=decision_id,
+            proposed_action_id=approval.proposed_action_id,
+            workflow_run_id=run.id,
+            workflow_name=run.workflow_name,
+            workflow_version=run.workflow_version,
+            ticket_id=approval.ticket_id,
+            customer_id=snapshot.customer_id,
+            order_id=approval.order_id,
+            action_type=execution_action,
+            approved_amount_pence=approval.approved_amount_pence,
+            business_idempotency_key=approval.idempotency_key,
+            approval_snapshot_hash=approval.evidence_snapshot_hash,
+            rule_result_hash=approval.rule_result_hash,
+            evidence_snapshot_hash=approval.evidence_snapshot_hash,
+            policy_version_ids=list(approval.policy_version_ids),
+            policy_content_hashes=list(snapshot.policy_content_hashes),
+            created_at=now,
+        )
+        job = OutboxJob(
+            id=job_id,
+            approval_request_id=approval.id,
+            workflow_run_id=run.id,
+            proposed_action_id=approval.proposed_action_id,
+            action_type=execution_action.value,
+            payload_version=payload.payload_version,
+            payload_json=payload.model_dump(mode="json"),
+            payload_hash=payload.compute_hash(),
+            idempotency_key=approval.idempotency_key,
+            status=OutboxStatus.PENDING,
+            priority=self._priority_for(approval.risk_level),
+            attempt_count=0,
+            maximum_attempts=self._settings.outbox_max_attempts,
+            next_attempt_at=now,
+        )
+        return await OutboxRepository(self._session).create(job)
+
+    @staticmethod
+    def _priority_for(risk_level: str) -> int:
+        # Higher-risk actions surface first for the worker.
+        return {"high": 300, "medium": 200}.get(risk_level, 100)
 
     async def _order_id_for(self, proposal: ProposedAction) -> uuid.UUID | None:
         run = await self._workflows.get(proposal.workflow_run_id)
@@ -777,6 +881,9 @@ class ApprovalService:
         *,
         created: bool,
         state: WorkflowState = WorkflowState.AWAITING_APPROVAL,
+        outbox_job_created: bool = False,
+        outbox_job_id: uuid.UUID | None = None,
+        manual_action_required: bool = False,
     ) -> ApprovalResult:
         return ApprovalResult(
             approval_id=approval.id,
@@ -788,7 +895,9 @@ class ApprovalService:
             maximum_allowed_amount_pence=approval.maximum_allowed_amount_pence,
             approved_amount_pence=approval.approved_amount_pence,
             created=created,
-            outbox_job_created=False,
+            outbox_job_created=outbox_job_created,
+            outbox_job_id=outbox_job_id,
+            manual_action_required=manual_action_required,
         )
 
 

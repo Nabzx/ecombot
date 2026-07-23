@@ -1,9 +1,9 @@
 """PostgreSQL-backed approval-service tests (S6).
 
 Drives the real ``DEMO-REFUND-APPROVAL-001`` workflow to ``awaiting_approval``, then
-exercises creation, editing, the four decision paths and every safety guard. Execution
-is out of scope for this increment: a successful approval must stop at
-``approved_pending_execution`` with no outbox job.
+exercises creation, editing, the four decision paths and every safety guard. A successful
+approval atomically enqueues exactly one durable outbox job; execution itself is the
+worker's job and is covered separately.
 """
 
 from __future__ import annotations
@@ -230,7 +230,7 @@ async def test_snapshot_tampering_is_detected(
 
 
 # --- approval -----------------------------------------------------------------------
-async def test_approve_moves_workflow_and_creates_no_outbox_job(
+async def test_approve_creates_exactly_one_outbox_job(
     maker: async_sessionmaker[AsyncSession],
 ) -> None:
     approval_id, run_id, _ = await _pending_approval(maker)
@@ -242,14 +242,19 @@ async def test_approve_moves_workflow_and_creates_no_outbox_job(
         )
         await session.commit()
 
-        assert result.status == ApprovalStatus.APPROVED
-        assert result.outbox_job_created is False
+        # The approval reaches execution_pending with exactly one queued job.
+        assert result.status == ApprovalStatus.EXECUTION_PENDING
+        assert result.outbox_job_created is True
+        assert result.outbox_job_id is not None
         run = await WorkflowRepository(session).get(run_id)
         assert run is not None
         assert run.current_state == WorkflowState.APPROVED_PENDING_EXECUTION
-        # Nothing was executed or queued in this increment.
-        assert await session.scalar(text("SELECT count(*) FROM outbox_jobs")) == 0
+        # Exactly one job, and nothing executed yet.
+        assert await session.scalar(text("SELECT count(*) FROM outbox_jobs")) == 1
         assert await session.scalar(text("SELECT count(*) FROM executed_actions")) == 0
+        proposal = await WorkflowRepository(session).get_current_proposal(run_id)
+        assert proposal is not None
+        assert proposal.status == ProposedActionStatus.APPROVED_PENDING_EXECUTION
 
         decisions = await ApprovalDecisionRepository(session).list_for_request(
             approval_id
@@ -258,6 +263,44 @@ async def test_approve_moves_workflow_and_creates_no_outbox_job(
         assert decisions[0].actor_user_id == supervisor.user_id
         assert decisions[0].previous_status == ApprovalStatus.PENDING.value
         assert decisions[0].new_status == ApprovalStatus.APPROVED.value
+
+
+async def test_outbox_job_payload_is_verifiable_and_bound(
+    maker: async_sessionmaker[AsyncSession],
+) -> None:
+    from app.outbox.enums import OutboxStatus
+    from app.outbox.payload import load_payload
+    from app.outbox.repository import OutboxRepository
+
+    approval_id, run_id, _ = await _pending_approval(maker)
+    async with maker() as session:
+        supervisor = await _second_supervisor(session)
+        result = await ApprovalService(session, clock=seed_reference_clock()).approve(
+            approval_id, ApproveRequest(), supervisor
+        )
+        await session.commit()
+
+        assert result.outbox_job_id is not None
+        job = await OutboxRepository(session).get(result.outbox_job_id)
+        assert job is not None
+        assert job.status == OutboxStatus.PENDING
+        assert job.action_type == "simulated_refund"
+        # The stored payload verifies against its hash and binds the exact approval.
+        payload = load_payload(job.payload_json, job.payload_hash)
+        assert payload.approval_request_id == approval_id
+        assert payload.business_idempotency_key == job.idempotency_key
+        assert (
+            payload.approval_snapshot_hash == job.payload_json["approval_snapshot_hash"]
+        )
+        # One job per approval / business action.
+        assert await OutboxRepository(session).get_by_approval(approval_id) is not None
+        assert (
+            await session.scalar(
+                text("SELECT count(*) FROM outbox_jobs WHERE approval_request_id = :a"),
+                {"a": str(approval_id)},
+            )
+            == 1
+        )
 
 
 async def test_approve_writes_step_and_checkpoint(

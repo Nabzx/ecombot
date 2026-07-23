@@ -188,7 +188,7 @@ async def test_queue_and_detail_are_pii_safe(
     assert "draft_response_body" not in body
 
 
-async def test_supervisor_approves_and_nothing_is_queued(
+async def test_supervisor_approve_queues_one_job(
     api: tuple[AsyncClient, async_sessionmaker[AsyncSession]],
 ) -> None:
     client, factory = api
@@ -204,9 +204,9 @@ async def test_supervisor_approves_and_nothing_is_queued(
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["approval"]["status"] == "approved"
+    assert body["approval"]["status"] == "execution_pending"
     assert body["workflow_state"] == "approved_pending_execution"
-    assert body["outbox_job_created"] is False
+    assert body["outbox_job_created"] is True
 
     decisions = await client.get(
         f"/api/approvals/{approval_id}/decisions", headers=_auth(supervisor_token)
@@ -251,7 +251,7 @@ async def test_approve_is_idempotent_under_a_repeated_key(
         f"/api/approvals/{approval_id}/approve", json={}, headers=headers
     )
     assert second.status_code == 200, second.text
-    assert second.json()["approval"]["status"] == "approved"
+    assert second.json()["approval"]["status"] == "execution_pending"
 
     decisions = await client.get(
         f"/api/approvals/{approval_id}/decisions", headers=_auth(supervisor_token)
