@@ -18,6 +18,12 @@ from app.models.outbox import OutboxJob
 from app.models.outbox_attempt import OutboxAttempt
 from app.outbox.enums import CLAIMABLE_STATUSES, UNCLAIMABLE_STATUSES, OutboxStatus
 
+# Statuses a worker may claim: freshly claimable, plus claimed/processing jobs whose
+# lease has expired (the lease predicate in the claim query enforces the expiry).
+_CLAIMABLE_OR_RECLAIMABLE: frozenset[OutboxStatus] = CLAIMABLE_STATUSES | frozenset(
+    {OutboxStatus.CLAIMED, OutboxStatus.PROCESSING}
+)
+
 
 class OutboxRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -77,10 +83,13 @@ class OutboxRepository:
         A job is claimable when it is pending/retry_scheduled and due, or when a prior
         lease has expired (safe reclamation). Terminal jobs are never returned.
         """
+        # Claimable = a due pending/retry job, OR a claimed/processing job whose lease
+        # expired (safe reclamation of a crashed worker). A validly-leased job is never
+        # claimed, and terminal jobs are excluded by construction.
         stmt = (
             select(OutboxJob)
             .where(
-                OutboxJob.status.in_(tuple(CLAIMABLE_STATUSES)),
+                OutboxJob.status.in_(tuple(_CLAIMABLE_OR_RECLAIMABLE)),
                 OutboxJob.next_attempt_at <= now,
                 (
                     OutboxJob.lease_expires_at.is_(None)

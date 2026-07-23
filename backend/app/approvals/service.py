@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.actions.enums import PROPOSED_TO_EXECUTION, ExecutionActionType
+from app.actions.errors import ExecutionErrorCode
 from app.approvals.enums import (
     ApprovalDecisionType,
     ApprovalStatus,
@@ -65,6 +66,15 @@ from app.workflows.repository import WorkflowRepository
 
 SYSTEM_ACTOR_ROLE = "system"
 
+# Only these (technical) job failure codes may be retried by a Supervisor.
+_RETRYABLE_JOB_ERROR_CODES: frozenset[str] = frozenset(
+    {
+        ExecutionErrorCode.TRANSIENT_DEPENDENCY.value,
+        ExecutionErrorCode.LEASE_LOST.value,
+        ExecutionErrorCode.INJECTED_FAILURE.value,
+    }
+)
+
 
 # --- request/result types -----------------------------------------------------------
 @dataclass
@@ -90,6 +100,11 @@ class RejectRequest:
 @dataclass
 class CancelApprovalRequest:
     reason: str
+
+
+@dataclass
+class RetryApprovalRequest:
+    reason: str | None = None
 
 
 @dataclass
@@ -510,6 +525,101 @@ class ApprovalService:
                 )
             result.expired_ids.append(approval.id)
         return result
+
+    # -- supervisor retry authorisation ----------------------------------------------
+    async def retry(
+        self,
+        approval_id: uuid.UUID,
+        request: RetryApprovalRequest,
+        actor: AuthenticatedUser,
+    ) -> ApprovalResult:
+        """Authorise re-execution of a technically-failed (or dead-lettered) job.
+
+        Only technical failures are retryable. Snapshot tampering, ownership mismatch,
+        over-limit refunds, shipped orders, expired approvals and unsupported actions
+        are never retried — those must go through a fresh review.
+        """
+        self._require_active(actor)
+        approval = await self._requests.get_for_update(approval_id)
+        if approval is None:
+            raise ApprovalError(
+                ApprovalErrorCode.APPROVAL_NOT_FOUND, "approval not found"
+            )
+        self._require_permission(actor, Permission.APPROVAL_DECIDE)
+        if not actor.is_supervisor:
+            raise ApprovalError(
+                ApprovalErrorCode.APPROVAL_ROLE_FORBIDDEN,
+                "only a supervisor may authorise a retry",
+            )
+        if actor.user_id == approval.requester_user_id:
+            raise ApprovalError(
+                ApprovalErrorCode.APPROVAL_SELF_DECISION_FORBIDDEN,
+                "the requester may not authorise their own retry",
+            )
+        if approval.status != ApprovalStatus.EXECUTION_FAILED:
+            raise ApprovalError(
+                ApprovalErrorCode.APPROVAL_NOT_PENDING,
+                f"approval is {approval.status.value}, not execution_failed",
+            )
+        if approval.expires_at <= self._now():
+            raise ApprovalError(
+                ApprovalErrorCode.APPROVAL_EXPIRED, "the approval has expired"
+            )
+        self._verify_snapshot(approval)
+
+        job = await OutboxRepository(self._session).get_by_approval(approval.id)
+        if job is None:
+            raise ApprovalError(
+                ApprovalErrorCode.WORKFLOW_STATE_CONFLICT, "no outbox job to retry"
+            )
+        if job.status not in (OutboxStatus.FAILED, OutboxStatus.DEAD_LETTER):
+            raise ApprovalError(
+                ApprovalErrorCode.WORKFLOW_STATE_CONFLICT,
+                f"job status {job.status.value} is not retryable",
+            )
+        # Only a technical/dead-letter failure may be retried, never a business block.
+        if job.last_error_code not in _RETRYABLE_JOB_ERROR_CODES:
+            raise ApprovalError(
+                ApprovalErrorCode.EDIT_NOT_ALLOWED,
+                f"failure {job.last_error_code} is not eligible for retry",
+            )
+        run = await self._workflows.get(approval.workflow_run_id)
+        if run is None or run.current_state != WorkflowState.ACTION_FAILED:
+            raise ApprovalError(
+                ApprovalErrorCode.WORKFLOW_STATE_CONFLICT,
+                "workflow is not in action_failed",
+            )
+
+        now = self._now()
+        self._transition(approval, ApprovalStatus.EXECUTION_PENDING)
+        await self._decisions.append(
+            approval_request_id=approval.id,
+            decision=ApprovalDecisionType.RETRY_AUTHORISED,
+            actor_user_id=actor.user_id,
+            actor_role=actor.role.value,
+            previous_status=ApprovalStatus.EXECUTION_FAILED.value,
+            new_status=ApprovalStatus.EXECUTION_PENDING.value,
+            now=now,
+            reason=request.reason,
+        )
+        await OutboxRepository(self._session).reset_for_retry(
+            job, now=now, maximum_attempts=self._settings.outbox_max_attempts
+        )
+        await self._apply_workflow_transition(
+            run,
+            destination=WorkflowState.APPROVED_PENDING_EXECUTION,
+            step_name="retry_authorised",
+            approval=approval,
+            actor=actor,
+            reason="supervisor authorised retry",
+        )
+        return self._result(
+            approval,
+            created=False,
+            state=run.current_state,
+            outbox_job_created=True,
+            outbox_job_id=job.id,
+        )
 
     # -- internals -------------------------------------------------------------------
     def _now(self) -> datetime:

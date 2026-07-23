@@ -31,6 +31,7 @@ from app.approvals.service import (
     CreateApprovalRequest,
     EditApprovalRequest,
     RejectRequest,
+    RetryApprovalRequest,
 )
 from app.auth.models import AuthenticatedUser
 from app.db.session import get_sessionmaker
@@ -206,6 +207,20 @@ def cmd_expire(args: argparse.Namespace) -> int:
     return _run(_go)
 
 
+def cmd_retry(args: argparse.Namespace) -> int:
+    async def _go(session: AsyncSession) -> None:
+        actor = await _actor(session, args.actor)
+        result = await _service(session).retry(
+            uuid.UUID(args.approval), RetryApprovalRequest(reason=args.reason), actor
+        )
+        print(
+            f"retry authorised {result.approval_id} "
+            f"outbox_job={result.outbox_job_id} status={result.status.value}"
+        )
+
+    return _run(_go)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.approvals.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -253,6 +268,15 @@ def build_parser() -> argparse.ArgumentParser:
     expire = sub.add_parser("expire", help="expire approvals past their deadline")
     expire.add_argument("--limit", type=int, default=50)
     expire.set_defaults(func=cmd_expire)
+
+    retry = sub.add_parser(
+        "retry", help="authorise retry of a technically-failed execution"
+    )
+    retry.add_argument("approval")
+    # --user is the documented flag; --as is accepted for consistency with siblings.
+    retry.add_argument("--user", "--as", dest="actor", required=True)
+    retry.add_argument("--reason")
+    retry.set_defaults(func=cmd_retry)
     return parser
 
 
