@@ -69,8 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["*"],
         )
 
-    # Health endpoints live at the root; business API is namespaced under the prefix.
+    # Health + metrics endpoints live at the root; business API is under the prefix.
+    from app.api.routes import metrics as metrics_routes
+
     app.include_router(health.router)
+    app.include_router(metrics_routes.router)
     app.include_router(api_router, prefix=settings.api_prefix)
 
     # Authenticated business endpoints (own /api/... prefixes).

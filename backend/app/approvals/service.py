@@ -50,6 +50,7 @@ from app.models.enums import UserRole
 from app.models.outbox import OutboxJob
 from app.models.ticket import Ticket
 from app.models.workflow import ProposedAction, WorkflowRun
+from app.observability.metrics import M_APPROVAL_DECISIONS, registry
 from app.outbox.enums import OutboxStatus
 from app.outbox.payload import OutboxJobData
 from app.outbox.repository import OutboxRepository
@@ -191,6 +192,7 @@ class ApprovalService:
             metadata=metadata,
             correlation_id=approval.idempotency_key,
         )
+        registry().inc(M_APPROVAL_DECISIONS, event=event_type.value)
 
     # -- creation --------------------------------------------------------------------
     async def create_request(

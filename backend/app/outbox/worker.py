@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import get_sessionmaker
+from app.observability.metrics import M_EXECUTIONS, registry
 from app.outbox.processor import FailureInjector, OutboxProcessor, ProcessResult
 from app.outbox.repository import OutboxRepository
 from app.rules.clock import Clock, SystemClock
@@ -88,6 +89,7 @@ class OutboxWorker:
         for job_id in job_ids:
             result = await self._processor.process_job(job_id)
             self.stats.record(result)
+            registry().inc(M_EXECUTIONS, outcome=result.outcome.value)
             logger.info(
                 "outbox_job_processed",
                 extra={

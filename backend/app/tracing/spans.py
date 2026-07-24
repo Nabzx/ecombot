@@ -1,7 +1,7 @@
 """Deterministic, offline tracing (S7).
 
 A minimal span model and tracer that produce a trace per workflow run / outbox job with
-child spans for each phase. Spans **never** leave the process to a remote collector: they
+child spans for each phase. Spans never leave the process to a remote collector: they
 export to structured logs, an in-memory collector (tests/eval) or a JSON file. Under the
 deterministic seed clock, span timings are reproducible (durations may be zero).
 
