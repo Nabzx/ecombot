@@ -21,6 +21,7 @@ FRONTEND_DIR := frontend
         approval-approve approval-reject approval-expire approval-retry \
         outbox-list outbox-stats process-outbox release-outbox-leases \
         action-list refund-ledger approval-demo eval-approvals \
+        audit-list audit-verify audit-trace eval-observability \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -186,6 +187,18 @@ eval-workflows: ## Run the workflow evaluation (enforces hard gates)
 
 eval-approvals: ## Run the approval/action safety evaluation (enforces S6 hard gates)
 	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.actions.evaluation
+
+eval-observability: ## Run the observability/audit evaluation (enforces S7 hard gates)
+	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.audit.evaluation
+
+audit-list: ## List recent audit events
+	$(COMPOSE) exec backend python -m app.audit.cli list $(if $(TYPE),--type $(TYPE),)
+
+audit-verify: ## Verify the audit hash-chain
+	$(COMPOSE) exec backend python -m app.audit.cli verify-chain
+
+audit-trace: ## Trace one correlation id: make audit-trace COR=<correlation-id>
+	$(COMPOSE) exec backend python -m app.audit.cli trace $(COR)
 
 approval-demo: ## Full approval -> execution demo (exactly-once, cancellation, manual)
 	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.approvals.cli demo-execution

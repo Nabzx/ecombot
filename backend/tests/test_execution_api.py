@@ -134,6 +134,28 @@ async def test_supervisor_can_inspect_outbox(
         assert (await client.get(url, headers=_auth(token))).status_code == 200
 
 
+async def test_audit_api_rbac_and_chain(
+    api: tuple[AsyncClient, async_sessionmaker[AsyncSession]],
+) -> None:
+    client, factory = api
+    agent_email, supervisor_email = await _emails(factory)
+    agent = await _token(client, agent_email)
+    supervisor = await _token(client, supervisor_email)
+
+    # A login already produced audit events; the supervisor can list and verify them.
+    listed = await client.get("/api/audit", headers=_auth(supervisor))
+    assert listed.status_code == 200
+    verify = await client.get("/api/audit/verify", headers=_auth(supervisor))
+    assert verify.status_code == 200
+    assert verify.json()["ok"] is True
+    # An agent may not read the full audit trail (worker/security diagnostics).
+    assert (await client.get("/api/audit", headers=_auth(agent))).status_code == 403
+    # But the audit rows are PII-safe: no emails or passwords in any summary/metadata.
+    for row in listed.json():
+        assert "@" not in row["summary"]
+        assert "password" not in str(row["metadata"]).lower()
+
+
 async def test_execution_endpoints_require_authentication(
     api: tuple[AsyncClient, async_sessionmaker[AsyncSession]],
 ) -> None:
