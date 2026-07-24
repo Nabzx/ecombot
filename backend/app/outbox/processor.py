@@ -40,11 +40,14 @@ from app.actions.repository import (
 from app.actions.revalidation import revalidate_before_execution
 from app.approvals.enums import ApprovalStatus
 from app.approvals.repository import ApprovalRequestRepository
+from app.audit.enums import AuditEventType
+from app.audit.service import AuditService
 from app.core.config import Settings, get_settings
 from app.models.approval import ApprovalRequest
 from app.models.enums import TicketStatus
 from app.models.execution import ExecutedAction, RefundLedgerEntry
 from app.models.order import Order
+from app.models.outbox import OutboxJob
 from app.models.ticket import Ticket
 from app.models.workflow import ProposedAction, WorkflowRun
 from app.outbox.enums import UNCLAIMABLE_STATUSES, OutboxStatus
@@ -312,6 +315,24 @@ class OutboxProcessor:
             TicketStatus.resolved,
         ):
             ticket.status = TicketStatus.resolved
+
+        # 7. Audit the (simulated) effect in this same transaction.
+        await AuditService(session).record(
+            AuditEventType.ACTION_EXECUTED,
+            occurred_at=now,
+            subject_type="executed_action",
+            subject_id=executed.id,
+            actor_role="system",
+            summary=f"simulated {payload.action_type.value} executed",
+            metadata={
+                "action_type": payload.action_type.value,
+                "reference": result.business_effect_reference,
+                "amount_pence": result.amount_pence,
+                "outbox_job_id": str(payload.outbox_job_id),
+                "simulated": True,
+            },
+            correlation_id=payload.business_idempotency_key,
+        )
         await session.flush()
 
     # -- phase 3: failure classification (separate transaction) ----------------------
@@ -377,6 +398,9 @@ class OutboxProcessor:
                     error=exc,
                     retryable=True,
                 )
+                await self._audit_failure(
+                    session, job, AuditEventType.ACTION_DEAD_LETTERED, exc, now
+                )
                 await session.commit()
                 return ProcessResult(
                     ProcessOutcome.DEAD_LETTER, job_id, error_code=exc.code.value
@@ -402,6 +426,17 @@ class OutboxProcessor:
                 error=exc,
                 retryable=False,
             )
+            await self._audit_failure(
+                session,
+                job,
+                (
+                    AuditEventType.ACTION_MANUAL_REQUIRED
+                    if destination is WorkflowState.MANUAL_ACTION_REQUIRED
+                    else AuditEventType.ACTION_FAILED
+                ),
+                exc,
+                now,
+            )
             await session.commit()
             outcome = (
                 ProcessOutcome.MANUAL_ACTION_REQUIRED
@@ -409,6 +444,30 @@ class OutboxProcessor:
                 else ProcessOutcome.FAILED
             )
             return ProcessResult(outcome, job_id, error_code=exc.code.value)
+
+    async def _audit_failure(
+        self,
+        session: AsyncSession,
+        job: OutboxJob,
+        event_type: AuditEventType,
+        exc: ExecutionError,
+        now: datetime,
+    ) -> None:
+        await AuditService(session).record(
+            event_type,
+            occurred_at=now,
+            subject_type="outbox_job",
+            subject_id=job.id,
+            actor_role="system",
+            summary=f"execution {event_type.value}: {exc.code.value}",
+            metadata={
+                "action_type": job.action_type,
+                "error_code": exc.code.value,
+                "error_kind": exc.kind.value,
+                "attempt_count": job.attempt_count,
+            },
+            correlation_id=job.idempotency_key,
+        )
 
     async def _fail_approval_and_workflow(
         self,

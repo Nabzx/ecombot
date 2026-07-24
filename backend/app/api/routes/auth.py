@@ -40,12 +40,36 @@ class MeResponse(BaseModel):
 async def login(
     body: LoginBody, session: SessionDep, settings: SettingsDep
 ) -> TokenPair:
+    from datetime import UTC, datetime
+
+    from app.audit.enums import AuditEventType
+    from app.audit.service import AuditService
+
+    now = datetime.now(UTC)
     try:
-        return await AuthService(session, settings).authenticate(
+        pair = await AuthService(session, settings).authenticate(
             body.email, body.password
         )
     except AuthenticationError as exc:
+        # A failed login is a security-relevant event; record it (no PII, no password).
+        await AuditService(session).record(
+            AuditEventType.AUTH_LOGIN_FAILED,
+            occurred_at=now,
+            subject_type="auth",
+            actor_role="anonymous",
+            summary="login failed",
+        )
+        await session.commit()
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    await AuditService(session).record(
+        AuditEventType.AUTH_LOGIN_SUCCEEDED,
+        occurred_at=now,
+        subject_type="auth",
+        actor_role="user",
+        summary="login succeeded",
+    )
+    await session.commit()
+    return pair
 
 
 @router.post("/refresh")

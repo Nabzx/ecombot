@@ -7,6 +7,7 @@ populated (used by Alembic and by test schema creation) and all relationships re
 from __future__ import annotations
 
 from app.models.approval import ApprovalDecision, ApprovalRequest
+from app.models.audit import AuditEvent
 from app.models.customer import Customer
 from app.models.enums import (
     CustomerTier,
@@ -44,6 +45,7 @@ from app.models.workflow import (
 __all__ = [
     "ApprovalDecision",
     "ApprovalRequest",
+    "AuditEvent",
     "Customer",
     "CustomerTier",
     "ExecutedAction",

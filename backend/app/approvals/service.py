@@ -40,6 +40,8 @@ from app.approvals.snapshot import (
     hash_text,
     verify_snapshot,
 )
+from app.audit.enums import AuditEventType
+from app.audit.service import AuditService
 from app.auth.enums import Permission
 from app.auth.models import AuthenticatedUser
 from app.core.config import Settings, get_settings
@@ -157,6 +159,38 @@ class ApprovalService:
         self._requests = ApprovalRequestRepository(session)
         self._decisions = ApprovalDecisionRepository(session)
         self._workflows = WorkflowRepository(session)
+        self._audit = AuditService(session)
+
+    async def _audit_approval(
+        self,
+        event_type: AuditEventType,
+        approval: ApprovalRequest,
+        *,
+        actor: AuthenticatedUser | None,
+        now: datetime,
+        summary: str,
+        extra: dict[str, object] | None = None,
+    ) -> None:
+        """Record an audit event for an approval, in this same transaction."""
+        metadata: dict[str, object] = {
+            "approval_id": str(approval.id),
+            "action_type": approval.action_type,
+            "risk_level": approval.risk_level,
+            "status": approval.status.value,
+        }
+        if extra:
+            metadata.update(extra)
+        await self._audit.record(
+            event_type,
+            occurred_at=now,
+            subject_type="approval",
+            subject_id=approval.id,
+            actor_user_id=actor.user_id if actor else None,
+            actor_role=actor.role.value if actor else SYSTEM_ACTOR_ROLE,
+            summary=summary,
+            metadata=metadata,
+            correlation_id=approval.idempotency_key,
+        )
 
     # -- creation --------------------------------------------------------------------
     async def create_request(
@@ -250,6 +284,13 @@ class ApprovalService:
             expires_at=now + timedelta(hours=self._settings.approval_expiry_hours),
         )
         await self._requests.create(approval)
+        await self._audit_approval(
+            AuditEventType.APPROVAL_REQUESTED,
+            approval,
+            actor=actor,
+            now=now,
+            summary="approval requested by agent",
+        )
         # The workflow stays paused in awaiting_approval; creation is not a decision.
         return self._result(approval, created=True)
 
@@ -364,6 +405,13 @@ class ApprovalService:
                 actor=actor,
                 reason="action is not automatically executable",
             )
+            await self._audit_approval(
+                AuditEventType.APPROVAL_APPROVED,
+                approval,
+                actor=actor,
+                now=now,
+                summary="approved; manual handling required (not auto-executable)",
+            )
             return self._result(
                 approval,
                 created=False,
@@ -390,6 +438,22 @@ class ApprovalService:
             now=now,
         )
         self._transition(approval, ApprovalStatus.EXECUTION_PENDING)
+        await self._audit_approval(
+            AuditEventType.APPROVAL_APPROVED,
+            approval,
+            actor=actor,
+            now=now,
+            summary="approved by supervisor",
+            extra={"approved_amount_pence": approval.approved_amount_pence},
+        )
+        await self._audit_approval(
+            AuditEventType.OUTBOX_JOB_CREATED,
+            approval,
+            actor=actor,
+            now=now,
+            summary="outbox job enqueued for execution",
+            extra={"outbox_job_id": str(job.id)},
+        )
         return self._result(
             approval,
             created=False,
@@ -445,6 +509,13 @@ class ApprovalService:
             approval=approval,
             actor=actor,
         )
+        await self._audit_approval(
+            AuditEventType.APPROVAL_REJECTED,
+            approval,
+            actor=actor,
+            now=now,
+            summary="rejected by supervisor",
+        )
         return self._result(approval, created=False, state=run.current_state)
 
     async def cancel(
@@ -491,6 +562,13 @@ class ApprovalService:
             approval=approval,
             actor=actor,
         )
+        await self._audit_approval(
+            AuditEventType.APPROVAL_CANCELLED,
+            approval,
+            actor=actor,
+            now=now,
+            summary="approval request cancelled",
+        )
         return self._result(approval, created=False, state=run.current_state)
 
     # -- expiry ----------------------------------------------------------------------
@@ -524,6 +602,13 @@ class ApprovalService:
                     approval=approval,
                     actor=None,
                 )
+            await self._audit_approval(
+                AuditEventType.APPROVAL_EXPIRED,
+                approval,
+                actor=None,
+                now=now,
+                summary="approval expired without a decision",
+            )
             result.expired_ids.append(approval.id)
         return result
 
@@ -613,6 +698,14 @@ class ApprovalService:
             approval=approval,
             actor=actor,
             reason="supervisor authorised retry",
+        )
+        await self._audit_approval(
+            AuditEventType.APPROVAL_RETRY_AUTHORISED,
+            approval,
+            actor=actor,
+            now=now,
+            summary="supervisor authorised execution retry",
+            extra={"outbox_job_id": str(job.id)},
         )
         return self._result(
             approval,
