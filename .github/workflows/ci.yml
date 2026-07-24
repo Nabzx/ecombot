@@ -152,5 +152,11 @@ jobs:
       - name: Workflow evaluation (mock mode, enforces hard safety gates)
         run: uv run python -m app.workflows.evaluation
 
-      - name: Run tests (models, rules, tools, retrieval, model layer, workflows)
+      - name: Approval/action evaluation (mock mode, enforces S6 hard gates)
+        run: uv run python -m app.actions.evaluation
+
+      - name: Exercise outbox processing deterministically
+        run: uv run python -m app.outbox.cli stats
+
+      - name: Run tests (models, rules, tools, retrieval, model, workflows, execution)
         run: uv run pytest

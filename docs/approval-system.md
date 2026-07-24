@@ -3,10 +3,11 @@
 AgentOps never lets a model act on a customer's money. Anything consequential — a refund,
 a cancellation — stops at `awaiting_approval` and waits for a named human Supervisor.
 
-> **Status:** the human-approval half of S6 is complete. Durable execution (outbox worker,
-> refund ledger writes, executed-action records) is **not** built yet. Today a successful
-> approval moves the workflow to `approved_pending_execution` and stops there; no job is
-> queued and nothing is executed.
+> **Status:** S6 is complete. A successful approval for an automatically executable action
+> atomically enqueues one durable outbox job, and the worker executes a **simulated** refund
+> or cancellation exactly once. See [outbox-worker.md](outbox-worker.md),
+> [action-execution.md](action-execution.md) and
+> [exactly-once-semantics.md](exactly-once-semantics.md).
 
 ## The core invariant
 
@@ -73,10 +74,16 @@ though their role permits deciding in general — checked against
 
 | Decision | Approval status | Workflow state |
 | --- | --- | --- |
-| Approve | `approved` | `approved_pending_execution` (nothing queued yet) |
+| Approve (executable) | `approved` → `execution_pending` | `approved_pending_execution` (one outbox job) |
+| Approve (manual-only) | `approved` | `manual_action_required` (no job) |
 | Reject | `rejected` | `approval_rejected` (terminal) |
 | Cancel | `cancelled` | `awaiting_agent` — the proposal is withdrawn, not refused |
 | Expire | `expired` | `approval_expired` (paused, re-requestable) |
+| Retry authorised | `execution_pending` | `approved_pending_execution` (technical failures only) |
+
+The proposed action tracks the same lifecycle: `awaiting_approval → approved_pending_execution`
+on approval, `→ completed` on successful execution, `→ rejected` on rejection. A failed
+technical execution never marks the proposal completed.
 
 Every decision writes an append-only `approval_decisions` row recording the actor, their
 role, the previous and new status, both amounts and the reason. Decisions are never updated
@@ -153,8 +160,10 @@ $ python -m app.approvals.cli reject 7dcb9054… --as super.george@meridian.exam
 approval_not_pending: approval is approved
 ```
 
-## Still to build
+## Execution
 
-The outbox worker, refund and cancellation execution, executed-action records, refund
-ledger writes and dead-letter handling. The approval layer is deliberately shaped so that
-work extends the existing decision transaction rather than replacing it.
+A granted approval for an executable action enqueues one durable outbox job **in the same
+transaction** as the decision, and the worker executes a simulated effect exactly once. See
+[outbox-worker.md](outbox-worker.md), [action-execution.md](action-execution.md) and
+[exactly-once-semantics.md](exactly-once-semantics.md). Every effect is simulated; nothing
+external is ever contacted.

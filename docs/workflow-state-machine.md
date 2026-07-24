@@ -78,3 +78,39 @@ stateDiagram-v2
 illegal edge fails the step and terminates the run as `failed_dependency` (internal error).
 Paused and terminal states have no outgoing edges (enforced at module load and property-
 tested).
+
+## v2 execution states (S6)
+
+`support-ticket-v2` reuses every v1 processing stage and adds the approval/execution
+continuation from `awaiting_approval`. These edges are validated by the state machine but
+driven by **human decisions and the outbox worker**, never by the normal runner loop —
+the runner only auto-advances active processing states, so a v2 run pauses at
+`awaiting_approval` exactly like v1.
+
+```mermaid
+stateDiagram-v2
+    awaiting_approval --> approved_pending_execution: supervisor approves (executable)
+    awaiting_approval --> manual_action_required: approves (manual-only)
+    awaiting_approval --> approval_rejected: reject
+    awaiting_approval --> approval_expired: expire
+    awaiting_approval --> awaiting_agent: cancel (withdraw)
+    approved_pending_execution --> executing_action: worker claims
+    executing_action --> action_succeeded: effect applied (terminal)
+    executing_action --> action_failed: technical failure / dead-letter (paused)
+    executing_action --> manual_action_required: precondition changed (paused)
+    action_failed --> approved_pending_execution: supervisor authorises retry
+    action_failed --> manual_action_required
+```
+
+`action_succeeded` is a completed terminal state; `action_failed` and
+`manual_action_required` are paused (they await a human). Every execution transition writes
+a workflow step **and** a checkpoint. `support-ticket-v1` can never enter these states, and
+a default replay never executes an effect (see [action-execution.md](action-execution.md)
+and [exactly-once-semantics.md](exactly-once-semantics.md)).
+
+## Workflow identity
+
+A workflow definition is keyed by semantic version; both the canonical and the legacy name
+resolve to it, so early v2 runs persisted as `support-ticket-v1@2.0.0` stay fully readable
+and replayable while new v2 runs use the canonical `support-ticket-v2 @ 2.0.0`. The CLI and
+APIs display the canonical `name @ version` regardless of how a row was stored.

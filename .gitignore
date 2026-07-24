@@ -40,3 +40,4 @@ pgdata/
 evaluations/reports/retrieval/*.json
 evaluations/reports/model_layer/*.json
 evaluations/reports/workflows/*.json
+evaluations/reports/approvals_actions/*.json

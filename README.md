@@ -9,14 +9,19 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S6 — Human Approval and Durable Action Execution (in progress).** The
-> **human-approval half is complete**: JWT authentication, RBAC, hashed approval snapshots,
-> Supervisor approve/reject/cancel/expiry, self-approval prevention, concurrent-decision
-> protection, authenticated approval APIs and a CLI. A granted approval moves the workflow
-> to `approved_pending_execution` — **durable execution (outbox worker, refund ledger,
-> executed actions) is not built yet**, so still nothing consequential runs. See
-> [docs/approval-system.md](docs/approval-system.md) and
-> [docs/authentication-rbac.md](docs/authentication-rbac.md).
+> **Current stage: S6 — Human Approval and Durable Action Execution (complete).** JWT auth,
+> RBAC, hashed approval snapshots, Supervisor approve/reject/cancel/expiry, self-approval
+> prevention and concurrent-decision protection, plus **durable execution**: a granted
+> approval atomically enqueues one PostgreSQL outbox job, and a dedicated worker executes a
+> **simulated** refund or order cancellation **exactly once** with final deterministic
+> revalidation, bounded retries, dead-letter handling, Supervisor retry authorisation and
+> crash recovery. Every effect is simulated — no payment processor, carrier, store or email
+> is ever contacted. See [docs/approval-system.md](docs/approval-system.md),
+> [docs/outbox-worker.md](docs/outbox-worker.md),
+> [docs/action-execution.md](docs/action-execution.md),
+> [docs/exactly-once-semantics.md](docs/exactly-once-semantics.md),
+> [docs/authentication-rbac.md](docs/authentication-rbac.md) and
+> [docs/approval-action-evaluation.md](docs/approval-action-evaluation.md).
 >
 > **S5 — Workflow State Machine, Checkpointing & Replay.** On top of S0–S4,
 > this stage composes the model tasks, deterministic tools, retrieval and rules into an
@@ -28,10 +33,11 @@ golden evaluation set.
 > ownership/eligibility/risk/route, and **no consequential action is executed** (that is S6:
 > approvals, outbox, execution).
 
-## Human approval (S6)
+## Human approval & durable execution (S6)
 
-Consequential actions stop at `awaiting_approval` and wait for a named Supervisor. Nothing
-executes: a granted approval reaches `approved_pending_execution` and queues no work yet.
+Consequential actions stop at `awaiting_approval` and wait for a named Supervisor. A granted
+approval atomically enqueues one durable outbox job, and a worker applies a **simulated**
+effect exactly once — nothing external is ever contacted.
 
 - **Authentication & RBAC** (`app/auth/`): JWT access/refresh tokens with type checking,
   bcrypt passwords, and permission-based authorisation. See
@@ -39,12 +45,20 @@ executes: a granted approval reaches `approved_pending_execution` and queues no 
 - **Approval snapshots** (`app/approvals/snapshot.py`): the action, amount, deterministic
   limit, rule outcome and citations frozen into canonical JSON and SHA-256 hashed, re-verified
   before every decision so a Supervisor can only approve exactly what they were shown.
-- **Decisions** (`app/approvals/service.py`): approve / reject / cancel / expire as
-  append-only rows, with row-locked exactly-one-winner concurrency, derived amount ceilings,
-  and self-approval refused independently of role. See
-  [docs/approval-system.md](docs/approval-system.md).
-- **APIs & CLI** (`app/api/routes/approvals.py`, `app/approvals/cli.py`): an authenticated,
-  PII-safe approval queue with `Idempotency-Key` support, and `make approval-*` commands.
+- **Decisions & atomic enqueue** (`app/approvals/service.py`): approve / reject / cancel /
+  expire / retry as append-only rows, with row-locked exactly-one-winner concurrency, derived
+  amount ceilings, self-approval refused independently of role, and one outbox job created in
+  the same transaction as the approval. See [docs/approval-system.md](docs/approval-system.md).
+- **Durable outbox & worker** (`app/outbox/`): a PostgreSQL outbox with
+  `FOR UPDATE SKIP LOCKED` claiming, leases and safe reclamation, immutable attempt history,
+  bounded jittered retries and dead-letter handling. See
+  [docs/outbox-worker.md](docs/outbox-worker.md).
+- **Simulated execution** (`app/actions/`): a closed action registry, 17-point final
+  revalidation, and exactly-once refund/cancellation effects with a ledger-backed refund
+  history. See [docs/action-execution.md](docs/action-execution.md) and
+  [docs/exactly-once-semantics.md](docs/exactly-once-semantics.md).
+- **APIs & CLIs**: authenticated, PII-safe approval, action and outbox queues; `make
+  approval-*`, `make outbox-*`, `make action-list`, `make approval-demo`, `make eval-approvals`.
 
 ## Workflow engine (S5)
 
@@ -361,23 +375,25 @@ port 5433; override with `TEST_DATABASE_URL` if needed. Tests are isolated per-t
 transaction rollback.
 
 CI (`.github/workflows/ci.yml`) runs, on every push and PR: backend lint + type-check,
-the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector,
-applies migrations, seeds the synthetic data, runs the integrity check, and runs the
-full pytest suite. Nothing in CI requires paid APIs.
+the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector, applies
+migrations, seeds the synthetic data, indexes policies, runs the retrieval, model,
+workflow and **approval/action** evaluations (all hard gates must pass), exercises outbox
+processing, and runs the full pytest suite. Nothing in CI requires paid APIs, Ollama,
+Redis or external network.
 
-## Current limitations (S6, in progress)
+## Current limitations (S6)
 
-- **Nothing consequential is executed yet.** A Supervisor approval is recorded and the run
-  reaches `approved_pending_execution`, but no outbox job is created, no refund ledger entry
-  is written and no executed-action row exists. Money never moves. The remaining S6 work
-  (outbox worker, refund/cancellation execution, dead-letter handling) is the next
-  increment; the frontend is still the S0 status page.
+- **Every consequential effect is simulated.** Refunds and cancellations are recorded in a
+  demonstration ledger / order status with clearly-synthetic `SIM-…` references; no payment
+  processor, Shopify, carrier or email service is ever contacted. The frontend is still the
+  S0 status page.
 - The default provider is a deterministic **mock**, not a language model: it exercises the
-  engine (routing, checkpoints, safety, recovery) rather than demonstrating language quality.
+  engine (routing, checkpoints, safety, recovery, execution) rather than language quality.
   Ollama/hosted are optional and never required for tests or CI.
-- Outbox, executed-action and refund-ledger **tables exist but are never written to** yet.
-- New runs default to `support-ticket-v2` (approval-capable). `support-ticket-v1` is frozen
-  and remains replayable.
+- New runs default to `support-ticket-v2` (approval/execution-capable). `support-ticket-v1`
+  is frozen, non-executing and remains replayable; legacy v2 rows stay readable.
+- Replacement / return-authorisation proposals are approved but routed to
+  `manual_action_required` — only refunds and cancellations auto-execute.
 - `JWT_SECRET` in `.env.example` is a labelled development placeholder; configuration
   validation refuses to start in production while it is still in use.
 - The synthetic dataset is anchored to a fixed reference date (2026-07-16), so
@@ -391,7 +407,7 @@ full pytest suite. Nothing in CI requires paid APIs.
 S0 Foundations → S1 Domain & Synthetic Data → S2 Deterministic Tools & Business Rules →
 S3 Policy Retrieval & Evidence Grounding → S4 Provider Abstraction & Prompt System →
 S5 Workflow State Machine & Checkpointing → **S6 Human Approval & Durable Action Execution
-(this stage — approvals done, execution pending)** → S7 Observability & audit →
-S8 Evaluation → S9 Dashboard → S10 Hardening.
+(this stage — complete)** → S7 Observability & audit → S8 Evaluation → S9 Dashboard →
+S10 Hardening.
 
-**Next up: the rest of S6 — the outbox worker and durable action execution.**
+**Next up: S7 — Observability, audit and production reliability.**
