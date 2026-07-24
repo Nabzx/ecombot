@@ -1,0 +1,205 @@
+{
+  "dataset_version": "observability-v1",
+  "description": "S7 observability, audit and reliability evaluation cases.",
+  "case_count": 33,
+  "cases": [
+    {
+      "id": "aud-approval-requested",
+      "category": "audit_coverage",
+      "scenario": "approval request is audited",
+      "hard_gate": null
+    },
+    {
+      "id": "aud-approval-approved",
+      "category": "audit_coverage",
+      "scenario": "approval decision is audited",
+      "hard_gate": "consequential_action_without_audit"
+    },
+    {
+      "id": "aud-outbox-created",
+      "category": "audit_coverage",
+      "scenario": "outbox job creation is audited",
+      "hard_gate": "consequential_action_without_audit"
+    },
+    {
+      "id": "aud-action-executed",
+      "category": "audit_coverage",
+      "scenario": "executed action is audited",
+      "hard_gate": "consequential_action_without_audit"
+    },
+    {
+      "id": "aud-action-dead-letter",
+      "category": "audit_coverage",
+      "scenario": "dead-letter is audited",
+      "hard_gate": "consequential_action_without_audit"
+    },
+    {
+      "id": "aud-manual-required",
+      "category": "audit_coverage",
+      "scenario": "manual-handling is audited",
+      "hard_gate": null
+    },
+    {
+      "id": "aud-login-success",
+      "category": "audit_coverage",
+      "scenario": "successful login is audited",
+      "hard_gate": null
+    },
+    {
+      "id": "aud-login-failure",
+      "category": "audit_coverage",
+      "scenario": "failed login is audited",
+      "hard_gate": null
+    },
+    {
+      "id": "aud-one-per-effect",
+      "category": "audit_coverage",
+      "scenario": "exactly one audit record per executed action",
+      "hard_gate": "consequential_action_without_audit"
+    },
+    {
+      "id": "aud-rollback",
+      "category": "audit_coverage",
+      "scenario": "a rolled-back decision leaves no audit row",
+      "hard_gate": null
+    },
+    {
+      "id": "chain-verify",
+      "category": "chain_integrity",
+      "scenario": "the full chain verifies",
+      "hard_gate": null
+    },
+    {
+      "id": "chain-tamper-summary",
+      "category": "chain_integrity",
+      "scenario": "tampering a summary is detected",
+      "hard_gate": "broken_chain_accepted"
+    },
+    {
+      "id": "chain-tamper-metadata",
+      "category": "chain_integrity",
+      "scenario": "tampering metadata is detected",
+      "hard_gate": "broken_chain_accepted"
+    },
+    {
+      "id": "chain-delete-row",
+      "category": "chain_integrity",
+      "scenario": "deleting a row breaks the chain",
+      "hard_gate": "broken_chain_accepted"
+    },
+    {
+      "id": "chain-genesis",
+      "category": "chain_integrity",
+      "scenario": "the first entry chains from genesis",
+      "hard_gate": null
+    },
+    {
+      "id": "log-email",
+      "category": "log_redaction",
+      "scenario": "emails are redacted in logs",
+      "hard_gate": "pii_in_logs"
+    },
+    {
+      "id": "log-phone",
+      "category": "log_redaction",
+      "scenario": "phone numbers are redacted",
+      "hard_gate": "pii_in_logs"
+    },
+    {
+      "id": "log-card",
+      "category": "log_redaction",
+      "scenario": "card numbers are redacted",
+      "hard_gate": "pii_in_logs"
+    },
+    {
+      "id": "log-jwt",
+      "category": "log_redaction",
+      "scenario": "JWTs are redacted",
+      "hard_gate": "pii_in_logs"
+    },
+    {
+      "id": "log-password",
+      "category": "log_redaction",
+      "scenario": "password assignments are redacted",
+      "hard_gate": "pii_in_logs"
+    },
+    {
+      "id": "log-bearer",
+      "category": "log_redaction",
+      "scenario": "bearer tokens are redacted",
+      "hard_gate": "pii_in_logs"
+    },
+    {
+      "id": "trace-complete",
+      "category": "tracing",
+      "scenario": "an execution trace has no orphan spans",
+      "hard_gate": "orphan_span"
+    },
+    {
+      "id": "trace-single-id",
+      "category": "tracing",
+      "scenario": "all spans in a trace share one trace id",
+      "hard_gate": null
+    },
+    {
+      "id": "trace-parenting",
+      "category": "tracing",
+      "scenario": "child spans reference their parent",
+      "hard_gate": "orphan_span"
+    },
+    {
+      "id": "trace-root",
+      "category": "tracing",
+      "scenario": "the root span has no parent",
+      "hard_gate": null
+    },
+    {
+      "id": "cor-approve-execute",
+      "category": "correlation",
+      "scenario": "approval and execution share one correlation id",
+      "hard_gate": "correlation_lost"
+    },
+    {
+      "id": "cor-request-header",
+      "category": "correlation",
+      "scenario": "an inbound correlation header is preserved",
+      "hard_gate": "correlation_lost"
+    },
+    {
+      "id": "rel-request-id",
+      "category": "reliability",
+      "scenario": "every response carries a request id",
+      "hard_gate": null
+    },
+    {
+      "id": "rel-rate-limit",
+      "category": "reliability",
+      "scenario": "excessive requests are rate limited",
+      "hard_gate": null
+    },
+    {
+      "id": "rel-size-limit",
+      "category": "reliability",
+      "scenario": "oversized requests are rejected",
+      "hard_gate": null
+    },
+    {
+      "id": "rel-breaker",
+      "category": "reliability",
+      "scenario": "a failing provider trips its circuit breaker",
+      "hard_gate": null
+    },
+    {
+      "id": "rel-readiness",
+      "category": "reliability",
+      "scenario": "readiness distinguishes db and migrations",
+      "hard_gate": null
+    },
+    {
+      "id": "s6-gates",
+      "category": "regression",
+      "scenario": "no S6 safety gate regressed",
+      "hard_gate": "s6_regression"
+    }
+  ]
+}
