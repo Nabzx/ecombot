@@ -55,6 +55,8 @@ from app.outbox.payload import OutboxJobData, PayloadError, load_payload
 from app.outbox.repository import OutboxAttemptRepository, OutboxRepository
 from app.outbox.retry import next_attempt_at
 from app.rules.clock import Clock, SystemClock
+from app.tracing.exporters import default_exporter
+from app.tracing.spans import Tracer
 from app.workflows.checkpointing import build_snapshot, restore_state
 from app.workflows.definition import STATE_SCHEMA_VERSION
 from app.workflows.enums import ProposedActionStatus, WorkflowState, is_terminal
@@ -92,11 +94,13 @@ class OutboxProcessor:
         settings: Settings | None = None,
         clock: Clock | None = None,
         failure_injector: FailureInjector | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self._factory = session_factory
         self._settings = settings or get_settings()
         self._clock = clock or SystemClock()
         self._injector = failure_injector
+        self._tracer = tracer or Tracer(default_exporter(), clock=self._clock)
 
     def _now(self) -> datetime:
         value = self._clock.now()
@@ -107,13 +111,16 @@ class OutboxProcessor:
         attempt_number = await self._start_attempt(job_id)
         if attempt_number is None:
             return ProcessResult(ProcessOutcome.SKIPPED, job_id)
-        try:
-            async with self._factory() as session:
-                result = await self._execute(session, job_id, attempt_number)
-                await session.commit()
-                return result
-        except ExecutionError as exc:
-            return await self._handle_failure(job_id, attempt_number, exc)
+        with self._tracer.trace(
+            "outbox.process_job", trace_id=job_id.hex[:16], job_id=str(job_id)
+        ):
+            try:
+                async with self._factory() as session:
+                    result = await self._execute(session, job_id, attempt_number)
+                    await session.commit()
+                    return result
+            except ExecutionError as exc:
+                return await self._handle_failure(job_id, attempt_number, exc)
 
     # -- phase 1: attempt start ------------------------------------------------------
     async def _start_attempt(self, job_id: uuid.UUID) -> int | None:
@@ -189,15 +196,18 @@ class OutboxProcessor:
             )
 
         order = await self._lock_order(session, payload.order_id)
-        await revalidate_before_execution(
-            session,
-            payload=payload,
-            approval=approval,
-            proposal=proposal,
-            run=run,
-            order=order,
-            now=now,
-        )
+        with self._tracer.span(
+            "execution.revalidate", action=payload.action_type.value
+        ):
+            await revalidate_before_execution(
+                session,
+                payload=payload,
+                approval=approval,
+                proposal=proposal,
+                run=run,
+                order=order,
+                now=now,
+            )
 
         spec = get_handler_spec(payload.action_type)
         if spec is None:
@@ -220,20 +230,22 @@ class OutboxProcessor:
             correlation_id=run.correlation_id,
             attempt_number=attempt_number,
         )
-        result = await spec.handler.execute(
-            session, ctx, payload, order, order.shipment
-        )
-        await self._apply_success(
-            session,
-            job=job,
-            approval=approval,
-            proposal=proposal,
-            run=run,
-            order=order,
-            payload=payload,
-            result=result,
-            now=now,
-        )
+        with self._tracer.span("execution.handler", handler=spec.handler_version):
+            result = await spec.handler.execute(
+                session, ctx, payload, order, order.shipment
+            )
+        with self._tracer.span("execution.apply_effect"):
+            await self._apply_success(
+                session,
+                job=job,
+                approval=approval,
+                proposal=proposal,
+                run=run,
+                order=order,
+                payload=payload,
+                result=result,
+                now=now,
+            )
         await self._finish_attempt(session, job_id, attempt_number, "succeeded")
         return ProcessResult(
             ProcessOutcome.SUCCEEDED,
