@@ -83,6 +83,14 @@ async def _count(factory: async_sessionmaker[AsyncSession], table: str) -> int:
         return int(value or 0)
 
 
+async def _reset_all(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Reset the S6 execution tables *and* the audit log, isolating each scenario."""
+    await _reset(factory)
+    async with factory() as session:
+        await session.execute(text("TRUNCATE TABLE audit_events RESTART IDENTITY"))
+        await session.commit()
+
+
 # --- scenarios ----------------------------------------------------------------------
 async def _scn_actions_are_audited(f: async_sessionmaker[AsyncSession]) -> bool:
     job_id, _, _ = await _approved_refund_job(f)
@@ -219,7 +227,7 @@ async def run_evaluation(
 
     factory = session_factory or get_sessionmaker()
     for name, (scenario, gate) in _SCENARIOS.items():
-        await _reset(factory)
+        await _reset_all(factory)
         ev.scenarios_run += 1
         try:
             passed = await scenario(factory)
@@ -231,7 +239,7 @@ async def run_evaluation(
         else:
             ev.gates[gate] += 1
             ev.failures.append(f"scenario failed: {name} (gate {gate})")
-    await _reset(factory)
+    await _reset_all(factory)
 
     if write_report:
         _write_report(ev)

@@ -9,7 +9,18 @@ consequential action — stops at a **human approval gate** before a durable wor
 executes it exactly once. Every run is traced, costed, audited and scored against a
 golden evaluation set.
 
-> **Current stage: S6 — Human Approval and Durable Action Execution (complete).** JWT auth,
+> **Current stage: S7 — Observability, Audit Logs and Production Reliability (complete).**
+> One traceable identity per request/run/job; structured, provably PII-safe logs;
+> deterministic offline tracing; in-process metrics at `/metrics`; an immutable,
+> hash-chained audit log written transactionally with every consequential and security
+> event; and reliability hardening (request-id/timeout/size/rate-limit middleware, a
+> structured error envelope, a provider circuit breaker, and readiness that checks the
+> database *and* migrations). All telemetry is local and offline — no external APM,
+> collector or log shipper. See [docs/observability.md](docs/observability.md),
+> [docs/audit-log.md](docs/audit-log.md) and
+> [docs/production-reliability.md](docs/production-reliability.md).
+>
+> **S6 — Human Approval and Durable Action Execution (complete).** JWT auth,
 > RBAC, hashed approval snapshots, Supervisor approve/reject/cancel/expiry, self-approval
 > prevention and concurrent-decision protection, plus **durable execution**: a granted
 > approval atomically enqueues one PostgreSQL outbox job, and a dedicated worker executes a
@@ -32,6 +43,26 @@ golden evaluation set.
 > **The engine orchestrates; it is not the authority** — deterministic rules decide
 > ownership/eligibility/risk/route, and **no consequential action is executed** (that is S6:
 > approvals, outbox, execution).
+
+## Observability, audit & reliability (S7)
+
+The system is observable and auditable end to end, with production-reliability hardening —
+all local and offline.
+
+- **Traceable identity** (`app/core/context.py`): one correlation/request/trace context
+  propagated across API → workflow → approval → outbox → execution.
+- **PII-safe structured logging** (`app/core/logging.py`, `app/core/pii.py`): JSON records
+  with a redaction filter that strips emails, phones, cards, JWTs, bearer tokens and secret
+  assignments — proven by the `pii_in_logs` gate.
+- **Immutable hash-chained audit log** (`app/audit/`): every consequential and security
+  event, written in the same transaction as the event, tamper-evident and PII-safe. See
+  [docs/audit-log.md](docs/audit-log.md).
+- **Offline tracing & metrics** (`app/tracing/`, `app/observability/metrics.py`):
+  orphan-free traces and Prometheus metrics at `/metrics`; no remote collector.
+- **Reliability** (`app/api/middleware.py`, `app/observability/circuit_breaker.py`):
+  request-id/timeout/size/rate-limit middleware, structured error envelope, a provider
+  circuit breaker, and readiness that checks the database and migrations. See
+  [docs/production-reliability.md](docs/production-reliability.md).
 
 ## Human approval & durable execution (S6)
 
@@ -377,7 +408,8 @@ transaction rollback.
 CI (`.github/workflows/ci.yml`) runs, on every push and PR: backend lint + type-check,
 the frontend checks, and a backend-tests job that spins up PostgreSQL + pgvector, applies
 migrations, seeds the synthetic data, indexes policies, runs the retrieval, model,
-workflow and **approval/action** evaluations (all hard gates must pass), exercises outbox
+workflow, **approval/action** and **observability/audit** evaluations (all hard gates must
+pass), verifies the audit hash-chain, exercises outbox
 processing, and runs the full pytest suite. Nothing in CI requires paid APIs, Ollama,
 Redis or external network.
 
@@ -406,8 +438,8 @@ Redis or external network.
 
 S0 Foundations → S1 Domain & Synthetic Data → S2 Deterministic Tools & Business Rules →
 S3 Policy Retrieval & Evidence Grounding → S4 Provider Abstraction & Prompt System →
-S5 Workflow State Machine & Checkpointing → **S6 Human Approval & Durable Action Execution
-(this stage — complete)** → S7 Observability & audit → S8 Evaluation → S9 Dashboard →
-S10 Hardening.
+S5 Workflow State Machine & Checkpointing → S6 Human Approval & Durable Action Execution →
+**S7 Observability, Audit & Production Reliability (this stage — complete)** →
+S8 End-to-end evaluation & security hardening → S9 Dashboard → S10 Final polish.
 
-**Next up: S7 — Observability, audit and production reliability.**
+**Next up: S8 — full end-to-end evaluation and security hardening.**

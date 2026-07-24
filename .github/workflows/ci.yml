@@ -155,6 +155,12 @@ jobs:
       - name: Approval/action evaluation (mock mode, enforces S6 hard gates)
         run: uv run python -m app.actions.evaluation
 
+      - name: Observability/audit evaluation (enforces S7 hard gates)
+        run: uv run python -m app.actions.evaluation && uv run python -m app.audit.evaluation
+
+      - name: Verify the audit hash-chain
+        run: uv run python -m app.audit.cli verify-chain
+
       - name: Exercise outbox processing deterministically
         run: uv run python -m app.outbox.cli stats
 

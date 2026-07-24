@@ -73,8 +73,9 @@ async def maker() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
 async def _truncate_execution(session: AsyncSession) -> None:
     await session.execute(
         text(
-            "TRUNCATE TABLE refund_ledger_entries, executed_actions, outbox_attempts, "
-            "outbox_jobs, approval_requests, workflow_runs RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE audit_events, refund_ledger_entries, executed_actions, "
+            "outbox_attempts, outbox_jobs, approval_requests, workflow_runs "
+            "RESTART IDENTITY CASCADE"
         )
     )
 
