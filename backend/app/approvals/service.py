@@ -351,18 +351,11 @@ class ApprovalService:
         await self._set_proposal_status(
             approval, ProposedActionStatus.APPROVED_PENDING_EXECUTION
         )
-        await self._apply_workflow_transition(
-            run,
-            destination=WorkflowState.APPROVED_PENDING_EXECUTION,
-            step_name="approval_granted",
-            approval=approval,
-            actor=actor,
-        )
 
         execution_action = PROPOSED_TO_EXECUTION.get(approval.action_type)
         if execution_action is None:
             # Not automatically executable (e.g. replacement / return authorisation):
-            # record the approval but route to a human. No outbox job is created.
+            # record the approval but route the run straight to a human. No job.
             await self._apply_workflow_transition(
                 run,
                 destination=WorkflowState.MANUAL_ACTION_REQUIRED,
@@ -377,6 +370,14 @@ class ApprovalService:
                 state=run.current_state,
                 manual_action_required=True,
             )
+
+        await self._apply_workflow_transition(
+            run,
+            destination=WorkflowState.APPROVED_PENDING_EXECUTION,
+            step_name="approval_granted",
+            approval=approval,
+            actor=actor,
+        )
 
         # Atomically enqueue exactly one durable outbox job and move the approval to
         # execution_pending. The unique idempotency key + one-job-per-approval index

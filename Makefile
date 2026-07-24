@@ -20,7 +20,7 @@ FRONTEND_DIR := frontend
         list-users approval-list approval-inspect approval-decisions \
         approval-approve approval-reject approval-expire approval-retry \
         outbox-list outbox-stats process-outbox release-outbox-leases \
-        action-list refund-ledger \
+        action-list refund-ledger approval-demo eval-approvals \
         test test-backend test-frontend lint lint-backend lint-frontend \
         typecheck typecheck-backend typecheck-frontend format check
 
@@ -183,6 +183,12 @@ refund-ledger: ## Show an order's refund ledger: make refund-ledger ORDER=MER-20
 
 eval-workflows: ## Run the workflow evaluation (enforces hard gates)
 	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.workflows.evaluation
+
+eval-approvals: ## Run the approval/action safety evaluation (enforces S6 hard gates)
+	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.actions.evaluation
+
+approval-demo: ## Full approval -> execution demo (exactly-once, cancellation, manual)
+	$(COMPOSE) exec -e LLM_DEFAULT_PROVIDER=mock backend python -m app.approvals.cli demo-execution
 
 demo-rules: ## Run the deterministic layer over the named demo fixtures
 	@for fx in DEMO-TRACKING-001 DEMO-REFUND-APPROVAL-001 DEMO-RETURN-DAY-30 \

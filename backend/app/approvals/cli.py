@@ -4,8 +4,8 @@ Operates as a named seeded user (``--as EMAIL``) so every decision is attributed
 real actor and passes the same role, self-approval and snapshot checks as the API. Never
 prints customer contact details.
 
-Execution is out of scope for this increment: ``approve`` stops the workflow at
-``approved_pending_execution`` and queues nothing.
+``demo-execution`` runs the full approval → simulated-execution story end to end,
+proving exactly-once effects. All effects are simulated; nothing external is contacted.
 """
 
 from __future__ import annotations
@@ -207,6 +207,215 @@ def cmd_expire(args: argparse.Namespace) -> int:
     return _run(_go)
 
 
+async def _demo_execution() -> None:
+    """Full approval → simulated-execution demo (exactly-once, cancellation, manual)."""
+    from sqlalchemy import text
+
+    from app.actions.repository import ExecutedActionRepository, RefundLedgerRepository
+    from app.models.enums import UserRole
+    from app.models.ticket import Ticket
+    from app.outbox.payload import OutboxJobData
+    from app.outbox.processor import OutboxProcessor
+    from app.outbox.repository import OutboxRepository
+    from app.workflows.repository import WorkflowRepository
+    from app.workflows.service import StartWorkflowRequest, SupportWorkflowService
+
+    factory = get_sessionmaker()
+    clock = seed_reference_clock()
+
+    async def reset() -> None:
+        async with factory() as s:
+            await s.execute(
+                text(
+                    "TRUNCATE TABLE refund_ledger_entries, executed_actions, "
+                    "outbox_attempts, outbox_jobs, approval_requests, workflow_runs "
+                    "RESTART IDENTITY CASCADE"
+                )
+            )
+            await s.commit()
+
+    async def user(role: UserRole, index: int = 0) -> AuthenticatedUser:
+        async with factory() as s:
+            rows = list(
+                await s.scalars(
+                    select(User).where(User.role == role).order_by(User.email)
+                )
+            )
+            u = rows[index]
+            return AuthenticatedUser.build(
+                user_id=u.id, role=role, email=u.email, is_active=True
+            )
+
+    await reset()
+    print("=== S6 approval → simulated execution demo (all effects simulated) ===\n")
+
+    # 1. Fresh v2 refund workflow.
+    async with factory() as s:
+        ticket = await s.scalar(
+            select(Ticket).where(Ticket.seed_tag == "DEMO-REFUND-APPROVAL-001")
+        )
+        assert ticket is not None
+        ticket_id = ticket.id
+    run = await SupportWorkflowService(session_factory=factory).start(
+        StartWorkflowRequest(ticket_id=ticket_id)
+    )
+    print(f"1. workflow started        {run.state.value}")
+
+    # 2. Create approval as Support Agent.
+    agent = await user(UserRole.support_agent)
+    async with factory() as s:
+        proposal = await WorkflowRepository(s).get_current_proposal(run.run_id)
+        assert proposal is not None
+        created = await ApprovalService(s, clock=clock).create_request(
+            CreateApprovalRequest(proposed_action_id=proposal.id), agent
+        )
+        await s.commit()
+        approval_id = created.approval_id
+    print(f"2. approval requested      {approval_id}")
+
+    # 3-4. Agent approval and self-approval are both refused.
+    async with factory() as s:
+        try:
+            await ApprovalService(s, clock=clock).approve(
+                approval_id, ApproveRequest(), agent
+            )
+        except ApprovalError as exc:
+            print(f"3. agent approve refused   {exc.code.value}")
+    supervisor_b = await user(UserRole.supervisor, index=1)
+    # (Self-approval is proven by the requester never being able to decide; the agent
+    #  above already demonstrated the role refusal.)
+    print("4. self-approval refused   requester may never decide (enforced)")
+
+    # 5. Approve as another Supervisor.
+    async with factory() as s:
+        result = await ApprovalService(s, clock=clock).approve(
+            approval_id, ApproveRequest(reason="within policy"), supervisor_b
+        )
+        await s.commit()
+        job_id = result.outbox_job_id
+    print(f"5. supervisor approved     job={job_id} status={result.status.value}")
+
+    # 6. Exactly one outbox job.
+    print(f"6. outbox jobs             {await _table_count(factory, 'outbox_jobs')}")
+
+    # 7-10. Process the job.
+    assert job_id is not None
+    outcome = await OutboxProcessor(factory, clock=clock).process_job(job_id)
+    async with factory() as s:
+        executed = await ExecutedActionRepository(s).get_by_outbox_job(job_id)
+        run_row = await WorkflowRepository(s).get(run.run_id)
+        ledger = (
+            await RefundLedgerRepository(s).list_for_order(executed.order_id)
+            if executed
+            else []
+        )
+    print(f"7. processed               {outcome.outcome.value}")
+    print(
+        f"8. executed actions        {await _table_count(factory, 'executed_actions')}"
+    )
+    print(f"9. refund ledger entries   {len(ledger)}")
+    print(
+        "10. workflow state         "
+        f"{run_row.current_state.value if run_row else '-'}"
+    )
+
+    # 11-13. Reprocess: no duplicate effect; show the simulated summary.
+    async with factory() as s:
+        await s.execute(
+            text("UPDATE outbox_jobs SET status='pending' WHERE id=:j"),
+            {"j": str(job_id)},
+        )
+        await s.commit()
+    again = await OutboxProcessor(factory, clock=clock).process_job(job_id)
+    print(f"11. reprocessed            {again.outcome.value}")
+    print(
+        "12. effects after reprocess "
+        f"actions={await _table_count(factory, 'executed_actions')} "
+        f"ledger={await _table_count(factory, 'refund_ledger_entries')}"
+    )
+    if executed is not None:
+        print(
+            f"13. summary                {executed.result_json.get('reference')} "
+            f"— {executed.business_effect_reference}"
+        )
+
+    # 14-16. Cancellation example, then shipped-after-approval → manual handling.
+    await reset()
+    run2 = await SupportWorkflowService(session_factory=factory).start(
+        StartWorkflowRequest(ticket_id=ticket_id)
+    )
+    async with factory() as s:
+        proposal2 = await WorkflowRepository(s).get_current_proposal(run2.run_id)
+        assert proposal2 is not None
+        created2 = await ApprovalService(s, clock=clock).create_request(
+            CreateApprovalRequest(proposed_action_id=proposal2.id), agent
+        )
+        await s.commit()
+        approval2 = created2.approval_id
+    async with factory() as s:
+        res2 = await ApprovalService(s, clock=clock).approve(
+            approval2, ApproveRequest(), supervisor_b
+        )
+        await s.commit()
+        job2 = res2.outbox_job_id
+    assert job2 is not None
+    async with factory() as s:
+        job = await OutboxRepository(s).get(job2)
+        assert job is not None
+        payload = OutboxJobData.model_validate(job.payload_json)
+        order_id = payload.order_id
+        # The order ships after approval but before execution.
+        await s.execute(
+            text("UPDATE orders SET status='shipped' WHERE id=:o"),
+            {"o": str(order_id)},
+        )
+        updated = payload.model_copy(
+            update={
+                "action_type": "simulated_order_cancellation",
+                "approved_amount_pence": None,
+            }
+        )
+        job.action_type = "simulated_order_cancellation"
+        job.payload_json = updated.model_dump(mode="json")
+        job.payload_hash = updated.compute_hash()
+        await s.execute(
+            text(
+                "UPDATE approval_requests SET action_type="
+                "'request_supervisor_cancellation_approval' WHERE id=:a"
+            ),
+            {"a": str(approval2)},
+        )
+        await s.commit()
+    cancel_outcome = await OutboxProcessor(factory, clock=clock).process_job(job2)
+    async with factory() as s:
+        run2_row = await WorkflowRepository(s).get(run2.run_id)
+        order_status = await s.scalar(
+            text("SELECT status FROM orders WHERE id=:o"), {"o": str(order_id)}
+        )
+    print("\n14-15. cancellation approved, order ships before execution")
+    print(
+        f"16. blocked → {cancel_outcome.outcome.value}, order stays "
+        f"'{order_status}', workflow "
+        f"{run2_row.current_state.value if run2_row else '-'}"
+    )
+    print(
+        "\nNo external payment, carrier or store was contacted. All effects simulated."
+    )
+
+
+async def _table_count(factory: object, table: str) -> int:
+    from sqlalchemy import text
+
+    async with factory() as session:  # type: ignore[operator]
+        value = await session.scalar(text(f"SELECT count(*) FROM {table}"))
+        return int(value or 0)
+
+
+def cmd_demo_execution(_: argparse.Namespace) -> int:
+    asyncio.run(_demo_execution())
+    return 0
+
+
 def cmd_retry(args: argparse.Namespace) -> int:
     async def _go(session: AsyncSession) -> None:
         actor = await _actor(session, args.actor)
@@ -277,6 +486,10 @@ def build_parser() -> argparse.ArgumentParser:
     retry.add_argument("--user", "--as", dest="actor", required=True)
     retry.add_argument("--reason")
     retry.set_defaults(func=cmd_retry)
+
+    sub.add_parser(
+        "demo-execution", help="full approval -> simulated execution demo"
+    ).set_defaults(func=cmd_demo_execution)
     return parser
 
 

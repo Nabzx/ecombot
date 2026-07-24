@@ -1,0 +1,34 @@
+{
+  "dataset_version": "approvals-actions-v1",
+  "case_count": 87,
+  "category_coverage": {
+    "approval_to_outbox": 8,
+    "refund_execution": 27,
+    "cancellation": 9,
+    "reliability": 20,
+    "workflow": 11,
+    "api_security": 12
+  },
+  "scenarios_run": 11,
+  "scenarios_passed": 11,
+  "hard_gates": {
+    "approved_action_missing_outbox": 0,
+    "outbox_without_valid_approval": 0,
+    "action_without_valid_approval": 0,
+    "duplicate_business_effect": 0,
+    "refund_above_item_limit": 0,
+    "refund_above_order_balance": 0,
+    "refund_above_250": 0,
+    "cancellation_after_shipment": 0,
+    "cross_customer_execution": 0,
+    "expired_approval_execution": 0,
+    "tampered_snapshot_or_payload_execution": 0,
+    "unsupported_action_execution": 0,
+    "lost_committed_action": 0,
+    "replay_business_effect": 0
+  },
+  "all_gates_pass": true,
+  "failures": [],
+  "provider": "mock",
+  "effects": "simulated"
+}

@@ -1,0 +1,39 @@
+{
+  "dataset_version": "approvals-actions-v1",
+  "case_count": 87,
+  "category_coverage": {
+    "approval_to_outbox": 8,
+    "refund_execution": 27,
+    "cancellation": 9,
+    "reliability": 20,
+    "workflow": 11,
+    "api_security": 12
+  },
+  "scenarios_run": 11,
+  "scenarios_passed": 9,
+  "hard_gates": {
+    "approved_action_missing_outbox": 0,
+    "outbox_without_valid_approval": 0,
+    "action_without_valid_approval": 0,
+    "duplicate_business_effect": 0,
+    "refund_above_item_limit": 0,
+    "refund_above_order_balance": 0,
+    "refund_above_250": 0,
+    "cancellation_after_shipment": 0,
+    "cross_customer_execution": 1,
+    "expired_approval_execution": 0,
+    "tampered_snapshot_or_payload_execution": 0,
+    "unsupported_action_execution": 1,
+    "lost_committed_action": 0,
+    "replay_business_effect": 0
+  },
+  "all_gates_pass": false,
+  "failures": [
+    "cross_customer: ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.PostgresSyntaxError'>: syntax error at or near \":\"\n[SQL: UPDATE outbox_jobs SET payload_json = jsonb_set(payload_json,'{customer_id}', to_jsonb(:c::text)), payload_hash = 'x' WHERE id=$1]\n[parameters: ('c1f49c34-76e7-441a-a4db-7b390d546c87',)]\n(Background on this error at: https://sqlalche.me/e/20/f405)",
+    "scenario failed: cross_customer (gate cross_customer_execution)",
+    "manual_only: ApprovalError: illegal transition approved_pending_execution->manual_action_required",
+    "scenario failed: manual_only (gate unsupported_action_execution)"
+  ],
+  "provider": "mock",
+  "effects": "simulated"
+}

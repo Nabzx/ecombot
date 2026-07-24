@@ -1,0 +1,703 @@
+{
+  "dataset_version": "approvals-actions-v1",
+  "description": "S6 approval-to-execution safety evaluation cases (simulated effects only).",
+  "case_count": 87,
+  "cases": [
+    {
+      "id": "a2o-valid-refund",
+      "category": "approval_to_outbox",
+      "scenario": "valid refund approval creates exactly one outbox job",
+      "hard_gate": "approved_action_missing_outbox",
+      "live": "refund_success",
+      "expect": "one_job"
+    },
+    {
+      "id": "a2o-valid-cancel",
+      "category": "approval_to_outbox",
+      "scenario": "valid cancellation approval creates one outbox job",
+      "hard_gate": null,
+      "live": "cancellation_success",
+      "expect": "one_job"
+    },
+    {
+      "id": "a2o-duplicate-approval",
+      "category": "approval_to_outbox",
+      "scenario": "a repeated approval event yields the same single job",
+      "hard_gate": "duplicate_business_effect",
+      "live": "duplicate_processing",
+      "expect": "one_job"
+    },
+    {
+      "id": "a2o-duplicate-outbox",
+      "category": "approval_to_outbox",
+      "scenario": "no second outbox job for one business action",
+      "hard_gate": "duplicate_business_effect",
+      "live": "duplicate_processing",
+      "expect": null
+    },
+    {
+      "id": "a2o-manual-only",
+      "category": "approval_to_outbox",
+      "scenario": "a manual-only action creates no automatic job",
+      "hard_gate": null,
+      "live": "manual_only",
+      "expect": "no_job"
+    },
+    {
+      "id": "a2o-rejection",
+      "category": "approval_to_outbox",
+      "scenario": "a rejection creates no outbox job",
+      "hard_gate": null,
+      "live": null,
+      "expect": "no_job"
+    },
+    {
+      "id": "a2o-expiry",
+      "category": "approval_to_outbox",
+      "scenario": "an expired request creates no outbox job",
+      "hard_gate": null,
+      "live": null,
+      "expect": "no_job"
+    },
+    {
+      "id": "a2o-cancel-before-exec",
+      "category": "approval_to_outbox",
+      "scenario": "cancellation before execution withdraws the proposal",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-0.01",
+      "category": "refund_execution",
+      "scenario": "one penny refund",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-50",
+      "category": "refund_execution",
+      "scenario": "fifty pound refund",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-50.01",
+      "category": "refund_execution",
+      "scenario": "just over fifty pounds",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-250",
+      "category": "refund_execution",
+      "scenario": "exactly the \u00a3250 ceiling",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-250.01",
+      "category": "refund_execution",
+      "scenario": "one penny over \u00a3250 is blocked",
+      "hard_gate": "refund_above_250",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-exact-item",
+      "category": "refund_execution",
+      "scenario": "exactly the item limit",
+      "hard_gate": "refund_above_item_limit",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-item+1",
+      "category": "refund_execution",
+      "scenario": "one penny above item limit is blocked",
+      "hard_gate": "refund_above_item_limit",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-exact-balance",
+      "category": "refund_execution",
+      "scenario": "exactly the remaining balance",
+      "hard_gate": "refund_above_order_balance",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-balance+1",
+      "category": "refund_execution",
+      "scenario": "one penny above balance is blocked",
+      "hard_gate": "refund_above_order_balance",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-existing-partial",
+      "category": "refund_execution",
+      "scenario": "an existing partial refund reduces the remaining balance",
+      "hard_gate": "refund_above_order_balance",
+      "live": "prior_refund_balance",
+      "expect": null
+    },
+    {
+      "id": "refund-full-cumulative",
+      "category": "refund_execution",
+      "scenario": "cumulative refunds reaching total paid mark the order refunded",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-two-concurrent",
+      "category": "refund_execution",
+      "scenario": "two concurrent distinct refunds cannot exceed the order balance",
+      "hard_gate": "refund_above_order_balance",
+      "live": "concurrent_refunds",
+      "expect": null
+    },
+    {
+      "id": "refund-duplicate-worker",
+      "category": "refund_execution",
+      "scenario": "a duplicate worker produces no duplicate effect",
+      "hard_gate": "duplicate_business_effect",
+      "live": "competing_workers",
+      "expect": null
+    },
+    {
+      "id": "refund-duplicate-job",
+      "category": "refund_execution",
+      "scenario": "reprocessing the same job produces no duplicate ledger entry",
+      "hard_gate": "duplicate_business_effect",
+      "live": "duplicate_processing",
+      "expect": null
+    },
+    {
+      "id": "refund-expired",
+      "category": "refund_execution",
+      "scenario": "an expired approval never executes",
+      "hard_gate": "expired_approval_execution",
+      "live": "expired_blocked",
+      "expect": null
+    },
+    {
+      "id": "refund-tampered-snapshot",
+      "category": "refund_execution",
+      "scenario": "a tampered snapshot never executes",
+      "hard_gate": "tampered_snapshot_or_payload_execution",
+      "live": "tampered_payload",
+      "expect": null
+    },
+    {
+      "id": "refund-tampered-payload",
+      "category": "refund_execution",
+      "scenario": "a tampered payload never executes",
+      "hard_gate": "tampered_snapshot_or_payload_execution",
+      "live": "tampered_payload",
+      "expect": null
+    },
+    {
+      "id": "refund-invalid-policy",
+      "category": "refund_execution",
+      "scenario": "a changed policy version blocks execution",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-cross-customer",
+      "category": "refund_execution",
+      "scenario": "a cross-customer order never executes",
+      "hard_gate": "cross_customer_execution",
+      "live": "cross_customer",
+      "expect": null
+    },
+    {
+      "id": "cancel-placed",
+      "category": "cancellation",
+      "scenario": "cancellable while placed",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "cancel-paid",
+      "category": "cancellation",
+      "scenario": "cancellable while paid",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "cancel-processing",
+      "category": "cancellation",
+      "scenario": "cancellable while processing",
+      "hard_gate": null,
+      "live": "cancellation_success",
+      "expect": null
+    },
+    {
+      "id": "cancel-label",
+      "category": "cancellation",
+      "scenario": "cancellable with a label-created shipment",
+      "hard_gate": null,
+      "live": "cancellation_success",
+      "expect": null
+    },
+    {
+      "id": "cancel-shipped",
+      "category": "cancellation",
+      "scenario": "shipped after approval routes to manual handling",
+      "hard_gate": "cancellation_after_shipment",
+      "live": "cancellation_shipped",
+      "expect": null
+    },
+    {
+      "id": "cancel-delivered",
+      "category": "cancellation",
+      "scenario": "delivered after approval routes to manual handling",
+      "hard_gate": "cancellation_after_shipment",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "cancel-already",
+      "category": "cancellation",
+      "scenario": "already cancelled is a safe no-op",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "cancel-duplicate-job",
+      "category": "cancellation",
+      "scenario": "reprocessing a cancellation makes no duplicate effect",
+      "hard_gate": "duplicate_business_effect",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "cancel-cross-customer",
+      "category": "cancellation",
+      "scenario": "a cross-customer cancellation never executes",
+      "hard_gate": "cross_customer_execution",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "rel-crash-before-claim",
+      "category": "reliability",
+      "scenario": "worker crash before claim commit loses nothing",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "rel-crash-after-claim",
+      "category": "reliability",
+      "scenario": "worker crash after claim reclaims safely",
+      "hard_gate": "lost_committed_action",
+      "live": "expired_lease",
+      "expect": null
+    },
+    {
+      "id": "rel-crash-before-commit",
+      "category": "reliability",
+      "scenario": "crash before the execution commit applies no effect",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "rel-crash-after-commit",
+      "category": "reliability",
+      "scenario": "crash after commit keeps the single committed effect",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "rel-lease-expiry",
+      "category": "reliability",
+      "scenario": "an expired lease is reclaimable",
+      "hard_gate": null,
+      "live": "expired_lease",
+      "expect": null
+    },
+    {
+      "id": "rel-two-workers",
+      "category": "reliability",
+      "scenario": "two workers never duplicate an effect",
+      "hard_gate": "duplicate_business_effect",
+      "live": "competing_workers",
+      "expect": null
+    },
+    {
+      "id": "rel-retryable",
+      "category": "reliability",
+      "scenario": "a retryable technical failure is retried",
+      "hard_gate": null,
+      "live": "retry",
+      "expect": null
+    },
+    {
+      "id": "rel-retry-scheduling",
+      "category": "reliability",
+      "scenario": "retry scheduling is bounded with backoff",
+      "hard_gate": null,
+      "live": "retry",
+      "expect": null
+    },
+    {
+      "id": "rel-dead-letter",
+      "category": "reliability",
+      "scenario": "exhausted retries dead-letter",
+      "hard_gate": "lost_committed_action",
+      "live": "dead_letter",
+      "expect": null
+    },
+    {
+      "id": "rel-retry-auth",
+      "category": "reliability",
+      "scenario": "a supervisor may authorise retry of a technical failure",
+      "hard_gate": null,
+      "live": "retry_authorisation",
+      "expect": null
+    },
+    {
+      "id": "rel-worker-restart",
+      "category": "reliability",
+      "scenario": "a worker restart preserves jobs and actions",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-action-succeeded",
+      "category": "workflow",
+      "scenario": "a successful execution reaches action_succeeded",
+      "hard_gate": null,
+      "live": "refund_success",
+      "expect": null
+    },
+    {
+      "id": "wf-approval-rejected",
+      "category": "workflow",
+      "scenario": "a rejection reaches approval_rejected",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-approval-expired",
+      "category": "workflow",
+      "scenario": "an expiry reaches approval_expired",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-action-failed",
+      "category": "workflow",
+      "scenario": "a dead-letter reaches action_failed",
+      "hard_gate": null,
+      "live": "dead_letter",
+      "expect": null
+    },
+    {
+      "id": "wf-manual",
+      "category": "workflow",
+      "scenario": "a shipped cancellation reaches manual_action_required",
+      "hard_gate": null,
+      "live": "cancellation_shipped",
+      "expect": null
+    },
+    {
+      "id": "wf-v1-no-exec",
+      "category": "workflow",
+      "scenario": "support-ticket-v1 cannot enter execution states",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-replay-no-exec",
+      "category": "workflow",
+      "scenario": "a default replay executes nothing",
+      "hard_gate": "replay_business_effect",
+      "live": "replay_safety",
+      "expect": null
+    },
+    {
+      "id": "api-agent-no-internals",
+      "category": "api_security",
+      "scenario": "an agent cannot inspect worker/outbox internals",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-supervisor-outbox",
+      "category": "api_security",
+      "scenario": "a supervisor can inspect the outbox",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-no-execute",
+      "category": "api_security",
+      "scenario": "no production endpoint executes an action",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-forged-mapping",
+      "category": "api_security",
+      "scenario": "a forged action mapping is rejected",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-unsupported-version",
+      "category": "api_security",
+      "scenario": "an unsupported payload version fails safe",
+      "hard_gate": "unsupported_action_execution",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-secret-redaction",
+      "category": "api_security",
+      "scenario": "secrets are never returned",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-pii-redaction",
+      "category": "api_security",
+      "scenario": "customer PII is never returned",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-100",
+      "category": "refund_execution",
+      "scenario": "one hundred pound refund",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-150",
+      "category": "refund_execution",
+      "scenario": "one hundred fifty pound refund",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-249.99",
+      "category": "refund_execution",
+      "scenario": "just under the ceiling",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-negative",
+      "category": "refund_execution",
+      "scenario": "a non-positive amount is rejected",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-zero",
+      "category": "refund_execution",
+      "scenario": "a zero amount is rejected",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-blocked-proposal",
+      "category": "refund_execution",
+      "scenario": "a blocked proposal never executes",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-superseded",
+      "category": "refund_execution",
+      "scenario": "a superseded proposal never executes",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "refund-workflow-cancelled",
+      "category": "refund_execution",
+      "scenario": "a cancelled workflow never executes",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-1",
+      "category": "reliability",
+      "scenario": "crash before job claim commit",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-2",
+      "category": "reliability",
+      "scenario": "crash after claim",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-3",
+      "category": "reliability",
+      "scenario": "crash after attempt-start persistence",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-4",
+      "category": "reliability",
+      "scenario": "crash after executed-action insertion",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-5",
+      "category": "reliability",
+      "scenario": "crash after ledger insertion before commit",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-6",
+      "category": "reliability",
+      "scenario": "crash before outbox success update",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-7",
+      "category": "reliability",
+      "scenario": "crash after commit before acknowledgement",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-8",
+      "category": "reliability",
+      "scenario": "crash during checkpoint creation",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "crash-point-9",
+      "category": "reliability",
+      "scenario": "crash during lease renewal",
+      "hard_gate": "lost_committed_action",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-outbox-without-approval",
+      "category": "api_security",
+      "scenario": "no outbox job exists without a valid approval",
+      "hard_gate": "outbox_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-action-without-approval",
+      "category": "api_security",
+      "scenario": "no executed action exists without a valid approval",
+      "hard_gate": "action_without_valid_approval",
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-dev-gate",
+      "category": "api_security",
+      "scenario": "the dev process-one endpoint is disabled outside development",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-agent-action-visibility",
+      "category": "api_security",
+      "scenario": "an agent may view safe action summaries",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "api-attempt-history",
+      "category": "api_security",
+      "scenario": "attempt history is available to supervisors",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-executing-state",
+      "category": "workflow",
+      "scenario": "an execution passes through executing_action",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-final-checkpoint",
+      "category": "workflow",
+      "scenario": "every execution transition writes a step and checkpoint",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-legacy-v2-identity",
+      "category": "workflow",
+      "scenario": "a legacy v2 run remains inspectable",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    },
+    {
+      "id": "wf-canonical-v2-identity",
+      "category": "workflow",
+      "scenario": "new v2 runs use the canonical identity",
+      "hard_gate": null,
+      "live": null,
+      "expect": null
+    }
+  ]
+}
