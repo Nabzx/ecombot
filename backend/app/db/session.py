@@ -79,6 +79,24 @@ async def check_database_connection() -> bool:
         return False
 
 
+async def check_migrations_applied() -> bool:
+    """Return ``True`` if Alembic has stamped a schema version (migrations ran).
+
+    Readiness distinguishes "database reachable" from "schema migrated"; a reachable but
+    un-migrated database is not ready to serve. Never raises.
+    """
+    try:
+        engine = get_engine()
+        async with engine.connect() as connection:
+            result = await connection.execute(
+                text("SELECT version_num FROM alembic_version LIMIT 1")
+            )
+            return result.scalar_one_or_none() is not None
+    except Exception as exc:  # missing table / unreachable → not ready
+        logger.warning("Migration readiness check failed: %s", exc)
+        return False
+
+
 async def dispose_engine() -> None:
     """Dispose the engine and reset module state (called on app shutdown)."""
     global _engine, _sessionmaker

@@ -28,7 +28,7 @@ async def test_readiness_ok_when_database_reachable(client_db_ok: AsyncClient) -
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ready"
-    assert body["checks"] == {"database": "ok"}
+    assert body["checks"] == {"database": "ok", "migrations": "ok"}
     assert body["version"] == __version__
 
 
@@ -39,4 +39,4 @@ async def test_readiness_503_when_database_unreachable(
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "not_ready"
-    assert body["checks"] == {"database": "error"}
+    assert body["checks"] == {"database": "error", "migrations": "error"}

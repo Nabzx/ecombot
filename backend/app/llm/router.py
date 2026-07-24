@@ -19,6 +19,7 @@ from app.llm.models import (
     ModelResponse,
 )
 from app.llm.providers.base import ModelProvider
+from app.observability.circuit_breaker import BreakerRegistry
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class ProviderRouter:
         total_deadline: float = 90.0,
         backoff_base: float = 0.05,
         fallback_enabled: bool = True,
+        breakers: BreakerRegistry | None = None,
     ) -> None:
         self._providers = providers
         self._fallback_order = fallback_order
@@ -54,6 +56,7 @@ class ProviderRouter:
         self._total_deadline = total_deadline
         self._backoff_base = backoff_base
         self._fallback_enabled = fallback_enabled
+        self._breakers = breakers
 
     def _candidate_order(
         self, requested_provider: str | None, fallback_allowed: bool
@@ -111,6 +114,17 @@ class ProviderRouter:
                 )
                 continue
 
+            # A provider whose circuit breaker is open is skipped (fall through to the
+            # next candidate, ultimately the deterministic mock).
+            breaker = self._breakers.get(name) if self._breakers else None
+            if breaker is not None and not breaker.allow(loop.time()):
+                last_error = ModelProviderError(
+                    ModelErrorCode.PROVIDER_UNAVAILABLE,
+                    f"provider {name!r} circuit breaker is open",
+                    provider=name,
+                )
+                continue
+
             for attempt in range(1, self._max_attempts + 1):
                 total_attempts += 1
                 if loop.time() > deadline:
@@ -135,6 +149,8 @@ class ProviderRouter:
                         # Non-retryable: neither retry this provider nor fall back.
                         raise
                 else:
+                    if breaker is not None:
+                        breaker.record_success()
                     if index > 0:
                         fallback_from = requested
                         fallback_reason = (
@@ -153,6 +169,9 @@ class ProviderRouter:
                 # Retryable failure: back off before the next attempt on this provider.
                 if attempt < self._max_attempts:
                     await self._backoff(attempt)
+            # Every attempt on this provider failed: trip its breaker.
+            if breaker is not None:
+                breaker.record_failure(loop.time())
 
         # Every candidate failed.
         if last_error is not None:

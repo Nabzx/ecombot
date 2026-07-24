@@ -15,7 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from app import __version__
-from app.db.session import check_database_connection
+from app.db.session import check_database_connection, check_migrations_applied
 from app.schemas.health import HealthResponse, LivenessResponse, ReadinessResponse
 
 router = APIRouter(tags=["health"])
@@ -26,6 +26,11 @@ SERVICE_NAME = "agentops-api"
 async def database_ready() -> bool:
     """Dependency wrapper around the database readiness check (overridable in tests)."""
     return await check_database_connection()
+
+
+async def migrations_ready() -> bool:
+    """Wrapper around the migration readiness check (overridable in tests)."""
+    return await check_migrations_applied()
 
 
 @router.get("/health", response_model=HealthResponse, summary="Combined health status")
@@ -56,8 +61,12 @@ async def health_live() -> LivenessResponse:
 async def health_ready(
     response: Response,
     db_ok: Annotated[bool, Depends(database_ready)],
+    migrations_ok: Annotated[bool, Depends(migrations_ready)],
 ) -> ReadinessResponse:
-    checks: dict[str, str] = {"database": "ok" if db_ok else "error"}
+    checks: dict[str, str] = {
+        "database": "ok" if db_ok else "error",
+        "migrations": "ok" if migrations_ok else "error",
+    }
     all_ok = all(value == "ok" for value in checks.values())
     if not all_ok:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

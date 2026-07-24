@@ -45,6 +45,7 @@ from app.llm.schemas import OUTPUT_SCHEMAS
 from app.llm.structured import StructuredOutputError, parse_and_validate
 from app.llm.tasks.definitions import get_task_definition
 from app.llm.tasks.semantic import SemanticContext, validate_semantics
+from app.observability.circuit_breaker import BreakerRegistry
 from app.prompts.registry import PromptRegistry, get_prompt_registry
 from app.prompts.renderer import render_prompt
 
@@ -114,6 +115,10 @@ class ModelService:
             request_timeout=self._settings.llm_request_timeout_seconds,
             total_deadline=self._settings.llm_total_deadline_seconds,
             fallback_enabled=self._settings.llm_fallback_enabled,
+            breakers=BreakerRegistry(
+                threshold=self._settings.provider_breaker_threshold,
+                cooldown_seconds=self._settings.provider_breaker_cooldown_seconds,
+            ),
         )
 
     async def run_task(

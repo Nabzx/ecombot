@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator, Iterator
 
 import app.models  # noqa: F401  (register all models on Base.metadata)
 import pytest
-from app.api.routes.health import database_ready
+from app.api.routes.health import database_ready, migrations_ready
 from app.core.config import Settings
 from app.db.base import Base
 from app.main import create_app
@@ -51,6 +51,7 @@ async def client_db_ok(test_settings: Settings) -> AsyncIterator[AsyncClient]:
         return True
 
     app.dependency_overrides[database_ready] = _ready
+    app.dependency_overrides[migrations_ready] = _ready
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -66,6 +67,7 @@ async def client_db_down(test_settings: Settings) -> AsyncIterator[AsyncClient]:
         return False
 
     app.dependency_overrides[database_ready] = _not_ready
+    app.dependency_overrides[migrations_ready] = _not_ready
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

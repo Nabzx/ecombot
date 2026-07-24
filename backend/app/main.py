@@ -60,6 +60,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    # Reliability middleware runs outermost (added last): request id, correlation
+    # context, size limit, timeout, rate limit, metrics and the error envelope.
+    from app.api.middleware import ReliabilityMiddleware
+
     if settings.backend_cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -68,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    app.add_middleware(ReliabilityMiddleware, settings=settings)
 
     # Health + metrics endpoints live at the root; business API is under the prefix.
     from app.api.routes import metrics as metrics_routes

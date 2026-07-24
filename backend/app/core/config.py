@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     # Structured JSON logs (production); the console line stays the local default.
     log_json: bool = False
 
+    # --- Reliability (S7) ----------------------------------------------------
+    request_timeout_seconds: float = 30.0
+    max_request_bytes: int = 1_048_576  # 1 MiB
+    rate_limit_per_minute: int = 240  # per client, 0 disables
+    # Provider circuit breaker: open after N consecutive failures, probe after cooldown.
+    provider_breaker_threshold: int = 5
+    provider_breaker_cooldown_seconds: float = 30.0
+    provider_call_timeout_seconds: float = 20.0
+
     # --- HTTP server ---------------------------------------------------------
     api_host: str = "0.0.0.0"  # noqa: S104 - bind all interfaces inside the container
     api_port: int = 8000
