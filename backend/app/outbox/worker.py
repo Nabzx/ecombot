@@ -145,8 +145,8 @@ def _build_injector(settings: Settings) -> FailureInjector | None:
 
 
 async def _main() -> None:
-    configure_logging()
     settings = get_settings()
+    configure_logging(settings.log_level, json_logs=settings.log_json)
     if not settings.worker_enabled:
         logger.info("outbox_worker_disabled")
         return

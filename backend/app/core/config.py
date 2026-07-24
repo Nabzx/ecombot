@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     environment: Environment = "development"
     debug: bool = False
     log_level: str = "INFO"
+    # Structured JSON logs (production); the console line stays the local default.
+    log_json: bool = False
 
     # --- HTTP server ---------------------------------------------------------
     api_host: str = "0.0.0.0"  # noqa: S104 - bind all interfaces inside the container
